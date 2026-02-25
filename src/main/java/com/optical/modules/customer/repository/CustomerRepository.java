@@ -1,0 +1,30 @@
+package com.optical.modules.customer.repository;
+
+import com.optical.modules.customer.entity.Customer;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface CustomerRepository extends JpaRepository<Customer, Long> {
+
+    Optional<Customer> findByIdAndDeletedAtIsNull(Long id);
+
+    List<Customer> findAllByDeletedAtIsNull();
+
+    @Query("""
+            select c from Customer c
+            where c.deletedAt is null
+              and (
+                   :q is null or :q = ''
+                   or lower(coalesce(c.name, '')) like lower(concat('%', :q, '%'))
+                   or lower(coalesce(c.phone, '')) like lower(concat('%', :q, '%'))
+                   or lower(coalesce(c.email, '')) like lower(concat('%', :q, '%'))
+              )
+            """)
+    Page<Customer> search(@Param("q") String q, Pageable pageable);
+}
