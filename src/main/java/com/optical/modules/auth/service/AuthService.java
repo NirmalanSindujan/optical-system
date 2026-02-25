@@ -1,6 +1,7 @@
 package com.optical.modules.auth.service;
 
 import com.optical.modules.auth.dto.LoginRequest;
+import com.optical.modules.auth.dto.LoginResponse;
 import com.optical.modules.users.entity.User;
 import com.optical.modules.users.repository.UserRepository;
 import com.optical.security.JwtUtil;
@@ -16,7 +17,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
-    public String login(LoginRequest request) {
+    public LoginResponse login(LoginRequest request) {
 
         User user = userRepository
                 .findByUsernameAndDeletedAtIsNull(request.getUsername())
@@ -26,10 +27,14 @@ public class AuthService {
             throw new RuntimeException("Invalid username or password");
         }
 
-        return jwtUtil.generateToken(
+        String role = user.getRole().name();
+        Long branchId = user.getBranch() != null ? user.getBranch().getId() : null;
+        String token = jwtUtil.generateToken(
                 user.getUsername(),
-                user.getRole().name(),
-                user.getBranch() != null ? user.getBranch().getId() : null
+                role,
+                branchId
         );
+
+        return new LoginResponse(token, role, branchId, user.getUsername());
     }
 }

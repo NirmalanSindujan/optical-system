@@ -1,6 +1,7 @@
 package com.optical.modules.auth.controller;
 
 import com.optical.modules.auth.dto.LoginRequest;
+import com.optical.modules.auth.dto.LoginResponse;
 import com.optical.modules.auth.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +15,7 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
-    public String login(@Valid @RequestBody LoginRequest request) {
+    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
     }
 }
