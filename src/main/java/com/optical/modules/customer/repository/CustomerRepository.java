@@ -16,6 +16,11 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
     List<Customer> findAllByDeletedAtIsNull();
 
+    boolean existsByPhoneAndDeletedAtIsNull(String phone);
+    boolean existsByPhoneAndDeletedAtIsNullAndIdNot(String phone, Long id);
+    boolean existsByEmailIgnoreCaseAndDeletedAtIsNull(String email);
+    boolean existsByEmailIgnoreCaseAndDeletedAtIsNullAndIdNot(String email, Long id);
+
     @Query("""
             select c from Customer c
             where c.deletedAt is null

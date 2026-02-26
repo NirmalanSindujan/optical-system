@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,6 +21,18 @@ public class CustomerService {
     private final CustomerRepository customerRepository;
 
     public CustomerResponse create(CustomerRequest request) {
+        String normalizedPhone = normalize(request.getPhone());
+        String normalizedEmail = normalize(request.getEmail());
+
+        if (normalizedPhone != null
+                && customerRepository.existsByPhoneAndDeletedAtIsNull(normalizedPhone)) {
+            throw new RuntimeException("Customer phone already exists");
+        }
+        if (normalizedEmail != null
+                && customerRepository.existsByEmailIgnoreCaseAndDeletedAtIsNull(normalizedEmail)) {
+            throw new RuntimeException("Customer email already exists");
+        }
+
         Customer customer = new Customer();
         applyRequest(customer, request);
         Customer saved = customerRepository.save(customer);
@@ -58,6 +71,19 @@ public class CustomerService {
     public CustomerResponse update(Long id, CustomerRequest request) {
         Customer customer = customerRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
+
+        String normalizedPhone = normalize(request.getPhone());
+        String normalizedEmail = normalize(request.getEmail());
+
+        if (normalizedPhone != null
+                && customerRepository.existsByPhoneAndDeletedAtIsNullAndIdNot(normalizedPhone, id)) {
+            throw new RuntimeException("Customer phone already exists");
+        }
+        if (normalizedEmail != null
+                && customerRepository.existsByEmailIgnoreCaseAndDeletedAtIsNullAndIdNot(normalizedEmail, id)) {
+            throw new RuntimeException("Customer email already exists");
+        }
+
         applyRequest(customer, request);
         Customer saved = customerRepository.save(customer);
         return mapToResponse(saved);
@@ -72,12 +98,16 @@ public class CustomerService {
 
     private void applyRequest(Customer customer, CustomerRequest request) {
         customer.setName(request.getName());
-        customer.setPhone(request.getPhone());
-        customer.setEmail(request.getEmail());
+        customer.setPhone(normalize(request.getPhone()));
+        customer.setEmail(normalize(request.getEmail()));
         customer.setAddress(request.getAddress());
         customer.setGender(request.getGender());
         customer.setDob(request.getDob());
         customer.setNotes(request.getNotes());
+    }
+
+    private String normalize(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private CustomerResponse mapToResponse(Customer customer) {
