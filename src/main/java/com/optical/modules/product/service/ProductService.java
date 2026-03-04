@@ -9,12 +9,17 @@ import com.optical.modules.product.dto.LensSubtabResponse;
 import com.optical.modules.product.dto.ProductListResponse;
 import com.optical.modules.product.dto.ProductPageResponse;
 import com.optical.modules.product.dto.ProductVariantType;
+import com.optical.modules.product.dto.SunglassesCreateRequest;
+import com.optical.modules.product.dto.SunglassesDetailResponse;
+import com.optical.modules.product.dto.SunglassesListResponse;
+import com.optical.modules.product.dto.SunglassesPageResponse;
 import com.optical.modules.product.entity.AccessoryVariantDetails;
 import com.optical.modules.product.entity.FrameVariantDetails;
 import com.optical.modules.product.entity.LensVariantDetails;
 import com.optical.modules.product.entity.Product;
 import com.optical.modules.product.entity.ProductType;
 import com.optical.modules.product.entity.ProductVariant;
+import com.optical.modules.product.entity.SupplierProduct;
 import com.optical.modules.product.entity.SunglassesVariantDetails;
 import com.optical.modules.product.entity.Uom;
 import com.optical.modules.product.repository.AccessoryVariantDetailsRepository;
@@ -23,8 +28,10 @@ import com.optical.modules.product.repository.LensVariantDetailsRepository;
 import com.optical.modules.product.repository.ProductRepository;
 import com.optical.modules.product.repository.ProductTypeRepository;
 import com.optical.modules.product.repository.ProductVariantRepository;
+import com.optical.modules.product.repository.SupplierProductRepository;
 import com.optical.modules.product.repository.SunglassesVariantDetailsRepository;
 import com.optical.modules.product.repository.UomRepository;
+import com.optical.modules.supplier.repository.SupplierRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -35,14 +42,20 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class ProductService {
+
+    private static final String DEFAULT_PRODUCT_TYPE_CODE = "GENERAL";
+    private static final String DEFAULT_UOM_CODE = "EA";
+    private static final String SUNGLASSES_SKU_PREFIX = "SUN-";
 
     private final ProductRepository productRepository;
     private final ProductVariantRepository productVariantRepository;
@@ -52,6 +65,8 @@ public class ProductService {
     private final FrameVariantDetailsRepository frameVariantDetailsRepository;
     private final SunglassesVariantDetailsRepository sunglassesVariantDetailsRepository;
     private final AccessoryVariantDetailsRepository accessoryVariantDetailsRepository;
+    private final SupplierProductRepository supplierProductRepository;
+    private final SupplierRepository supplierRepository;
 
     @Transactional
     public ProductCreateResponse create(ProductCreateRequest request) {
@@ -72,6 +87,10 @@ public class ProductService {
 
         validateDetailPayload(request);
         validateCommercialFields(request);
+        List<Long> supplierIds = resolveAndValidateSupplierIds(
+                request.getSupplierId() == null ? null : List.of(request.getSupplierId()),
+                "supplierId is required"
+        );
 
         Product product = new Product();
         product.setProductType(productType);
@@ -80,6 +99,7 @@ public class ProductService {
         product.setDescription(normalize(request.getDescription()));
         product.setIsActive(request.getIsActive() == null ? true : request.getIsActive());
         Product savedProduct = productRepository.save(product);
+        linkSuppliersToProduct(savedProduct, supplierIds);
 
         ProductVariant variant = new ProductVariant();
         variant.setProduct(savedProduct);
@@ -104,11 +124,109 @@ public class ProductService {
                 .lensSubType(request.getLensDetails() == null ? null : request.getLensDetails().getLensSubType())
                 .productActive(savedProduct.getIsActive())
                 .variantActive(savedVariant.getIsActive())
-                .supplierId(request.getSupplierId())
+                .supplierId(supplierIds.get(0))
                 .purchasePrice(request.getPurchasePrice())
                 .sellingPrice(request.getSellingPrice())
                 .quantity(request.getQuantity())
                 .build();
+    }
+
+    @Transactional
+    public ProductCreateResponse createSunglasses(SunglassesCreateRequest request) {
+        ProductType productType = productTypeRepository.findById(DEFAULT_PRODUCT_TYPE_CODE)
+                .orElseThrow(() -> new ResourceNotFoundException("Default product type not found: " + DEFAULT_PRODUCT_TYPE_CODE));
+        Uom uom = uomRepository.findById(DEFAULT_UOM_CODE)
+                .orElseThrow(() -> new ResourceNotFoundException("Default UOM not found: " + DEFAULT_UOM_CODE));
+
+        String companyName = normalizeRequired(request.getCompanyName(), "companyName is required");
+        String productName = normalizeRequired(request.getName(), "name is required");
+        String normalizedDescription = normalizeRequired(request.getDescription(), "description is required");
+        List<Long> supplierIds = resolveSunglassesSupplierIds(request);
+
+        Product product = new Product();
+        product.setProductType(productType);
+        product.setBrandName(companyName);
+        product.setName(productName);
+        product.setDescription(normalizedDescription);
+        product.setIsActive(true);
+        Product savedProduct = productRepository.save(product);
+        linkSuppliersToProduct(savedProduct, supplierIds);
+
+        ProductVariant variant = new ProductVariant();
+        variant.setProduct(savedProduct);
+        variant.setSku(generateSunglassesSku(savedProduct.getId()));
+        variant.setBarcode(null);
+        variant.setUom(uom);
+        variant.setNotes(normalize(request.getNotes()));
+        variant.setAttributes(buildSunglassesAttributes(request, supplierIds));
+        variant.setIsActive(true);
+        ProductVariant savedVariant = productVariantRepository.save(variant);
+
+        SunglassesVariantDetails details = new SunglassesVariantDetails();
+        details.setVariant(savedVariant);
+        details.setDescription(normalizedDescription);
+        sunglassesVariantDetailsRepository.save(details);
+
+        return ProductCreateResponse.builder()
+                .productId(savedProduct.getId())
+                .variantId(savedVariant.getId())
+                .productTypeCode(productType.getCode())
+                .productName(savedProduct.getName())
+                .sku(savedVariant.getSku())
+                .barcode(savedVariant.getBarcode())
+                .variantType(ProductVariantType.SUNGLASSES)
+                .lensSubType(null)
+                .productActive(savedProduct.getIsActive())
+                .variantActive(savedVariant.getIsActive())
+                .supplierId(supplierIds.get(0))
+                .purchasePrice(request.getPurchasePrice())
+                .sellingPrice(request.getSellingPrice())
+                .quantity(request.getQuantity())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public SunglassesDetailResponse getSunglassesById(Long productId) {
+        SunglassesVariantDetails details = findSunglassesByProductId(productId);
+        return mapSunglassesDetail(details);
+    }
+
+    @Transactional
+    public SunglassesDetailResponse updateSunglasses(Long productId, SunglassesCreateRequest request) {
+        SunglassesVariantDetails details = findSunglassesByProductId(productId);
+        ProductVariant variant = details.getVariant();
+        Product product = variant.getProduct();
+
+        String companyName = normalizeRequired(request.getCompanyName(), "companyName is required");
+        String productName = normalizeRequired(request.getName(), "name is required");
+        String normalizedDescription = normalizeRequired(request.getDescription(), "description is required");
+        List<Long> supplierIds = resolveSunglassesSupplierIds(request);
+
+        product.setBrandName(companyName);
+        product.setName(productName);
+        product.setDescription(normalizedDescription);
+
+        variant.setNotes(normalize(request.getNotes()));
+        variant.setAttributes(buildSunglassesAttributes(request, supplierIds));
+
+        details.setDescription(normalizedDescription);
+        replaceSupplierLinks(product, supplierIds);
+
+        return mapSunglassesDetail(details);
+    }
+
+    @Transactional
+    public void deleteProduct(Long productId) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+
+        List<ProductVariant> variants = productVariantRepository.findByProductIdAndDeletedAtIsNull(productId);
+        for (ProductVariant variant : variants) {
+            productVariantRepository.delete(variant);
+        }
+
+        supplierProductRepository.softDeleteActiveByProductId(productId, LocalDateTime.now());
+        productRepository.delete(product);
     }
 
     @Transactional(readOnly = true)
@@ -149,10 +267,16 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
-    public ProductPageResponse searchSunglasses(String q, int page, int size) {
+    public SunglassesPageResponse searchSunglasses(String q, int page, int size) {
         Page<SunglassesVariantDetails> result = sunglassesVariantDetailsRepository.search(normalize(q), PageRequest.of(page, size));
-        List<ProductListResponse> items = result.getContent().stream().map(this::mapSunglassesItem).toList();
-        return buildPageResponse(result, items);
+        List<SunglassesListResponse> items = result.getContent().stream().map(this::mapSunglassesItem).toList();
+        return SunglassesPageResponse.builder()
+                .items(items)
+                .totalCounts(result.getTotalElements())
+                .page(result.getNumber())
+                .size(result.getSize())
+                .totalPages(result.getTotalPages())
+                .build();
     }
 
     @Transactional(readOnly = true)
@@ -384,31 +508,37 @@ public class ProductService {
                 .build();
     }
 
-    private ProductListResponse mapSunglassesItem(SunglassesVariantDetails details) {
+    private SunglassesListResponse mapSunglassesItem(SunglassesVariantDetails details) {
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
         Map<String, Object> attributes = variant.getAttributes();
 
-        return ProductListResponse.builder()
+        return SunglassesListResponse.builder()
+                .id(product.getId())
+                .modelName(product.getName())
+                .company(product.getBrandName())
+                .purchasePrice(parseBigDecimal(attributes.get("purchasePrice")))
+                .quantity(parseBigDecimal(attributes.get("quantity")))
+                .salesPrice(parseBigDecimal(attributes.get("sellingPrice")))
+                .build();
+    }
+
+    private SunglassesDetailResponse mapSunglassesDetail(SunglassesVariantDetails details) {
+        ProductVariant variant = details.getVariant();
+        Product product = variant.getProduct();
+        Map<String, Object> attributes = variant.getAttributes();
+
+        return SunglassesDetailResponse.builder()
                 .productId(product.getId())
                 .variantId(variant.getId())
-                .productTypeCode(product.getProductType().getCode())
-                .brandName(product.getBrandName())
+                .companyName(product.getBrandName())
                 .name(product.getName())
-                .description(product.getDescription())
-                .productActive(product.getIsActive())
-                .variantActive(variant.getIsActive())
-                .sku(variant.getSku())
-                .barcode(variant.getBarcode())
-                .uomCode(variant.getUom().getCode())
-                .notes(variant.getNotes())
-                .attributes(attributes)
-                .variantType(ProductVariantType.SUNGLASSES)
-                .supplierId(parseLong(attributes.get("supplierId")))
+                .description(details.getDescription())
+                .quantity(parseBigDecimal(attributes.get("quantity")))
                 .purchasePrice(parseBigDecimal(attributes.get("purchasePrice")))
                 .sellingPrice(parseBigDecimal(attributes.get("sellingPrice")))
-                .quantity(parseBigDecimal(attributes.get("quantity")))
-                .sunglassesDescription(details.getDescription())
+                .notes(variant.getNotes())
+                .supplierIds(resolveSupplierIdsForProduct(product.getId(), attributes))
                 .build();
     }
 
@@ -455,6 +585,99 @@ public class ProductService {
             attributes.put("quantity", request.getQuantity());
         }
         return attributes;
+    }
+
+    private Map<String, Object> buildSunglassesAttributes(SunglassesCreateRequest request, List<Long> supplierIds) {
+        Map<String, Object> attributes = new HashMap<>();
+        attributes.put("supplierIds", supplierIds);
+        attributes.put("supplierId", supplierIds.get(0));
+        attributes.put("purchasePrice", request.getPurchasePrice());
+        attributes.put("sellingPrice", request.getSellingPrice());
+        attributes.put("quantity", request.getQuantity());
+        return attributes;
+    }
+
+    private List<Long> resolveSunglassesSupplierIds(SunglassesCreateRequest request) {
+        List<Long> requestSupplierIds = request.getSupplierIds();
+        if (requestSupplierIds != null && !requestSupplierIds.isEmpty()) {
+            return resolveAndValidateSupplierIds(requestSupplierIds, "At least one valid supplier id is required");
+        }
+
+        if (request.getSupplierId() != null) {
+            return resolveAndValidateSupplierIds(List.of(request.getSupplierId()), "supplierIds or supplierId is required");
+        }
+
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "supplierIds or supplierId is required");
+    }
+
+    private List<Long> resolveAndValidateSupplierIds(List<Long> rawSupplierIds, String requiredMessage) {
+        List<Long> normalized = rawSupplierIds == null
+                ? List.of()
+                : rawSupplierIds.stream()
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+        if (normalized.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, requiredMessage);
+        }
+
+        for (Long supplierId : normalized) {
+            supplierRepository.findByIdAndDeletedAtIsNull(supplierId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Supplier not found: " + supplierId));
+        }
+        return normalized;
+    }
+
+    private void linkSuppliersToProduct(Product product, List<Long> supplierIds) {
+        List<SupplierProduct> links = supplierIds.stream()
+                .map(supplierId -> {
+                    SupplierProduct link = new SupplierProduct();
+                    link.setProduct(product);
+                    link.setSupplierId(supplierId);
+                    return link;
+                })
+                .toList();
+        supplierProductRepository.saveAll(links);
+    }
+
+    private void replaceSupplierLinks(Product product, List<Long> supplierIds) {
+        supplierProductRepository.softDeleteActiveByProductId(product.getId(), LocalDateTime.now());
+        linkSuppliersToProduct(product, supplierIds);
+    }
+
+    private SunglassesVariantDetails findSunglassesByProductId(Long productId) {
+        return sunglassesVariantDetailsRepository.findByProductId(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sunglasses not found"));
+    }
+
+    private List<Long> resolveSupplierIdsForProduct(Long productId, Map<String, Object> attributes) {
+        List<Long> supplierIds = supplierProductRepository.findActiveSupplierIdsByProductId(productId);
+        if (!supplierIds.isEmpty()) {
+            return supplierIds;
+        }
+
+        if (attributes == null || attributes.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> attributeSupplierIds = parseLongList(attributes.get("supplierIds"));
+        if (!attributeSupplierIds.isEmpty()) {
+            return attributeSupplierIds;
+        }
+
+        Long supplierId = parseLong(attributes.get("supplierId"));
+        return supplierId == null ? List.of() : List.of(supplierId);
+    }
+
+    private List<Long> parseLongList(Object value) {
+        if (!(value instanceof List<?> rawList)) {
+            return List.of();
+        }
+        return rawList.stream()
+                .map(this::parseLong)
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
     }
 
     private void validateCommercialFields(ProductCreateRequest request) {
@@ -529,6 +752,22 @@ public class ProductService {
         } catch (NumberFormatException ex) {
             return null;
         }
+    }
+
+    private String generateSunglassesSku(Long productId) {
+        String baseSku = SUNGLASSES_SKU_PREFIX + productId;
+        if (!productVariantRepository.existsBySkuAndDeletedAtIsNull(baseSku)) {
+            return baseSku;
+        }
+
+        for (int i = 0; i < 5; i++) {
+            String candidate = baseSku + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+            if (!productVariantRepository.existsBySkuAndDeletedAtIsNull(candidate)) {
+                return candidate;
+            }
+        }
+
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "Unable to generate unique SKU");
     }
 
     private String normalize(String value) {

@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
+
 public interface SunglassesVariantDetailsRepository extends JpaRepository<SunglassesVariantDetails, Long> {
 
     @Query("""
@@ -24,6 +26,16 @@ public interface SunglassesVariantDetailsRepository extends JpaRepository<Sungla
               )
             """)
     Page<SunglassesVariantDetails> search(@Param("q") String q, Pageable pageable);
+
+    @Query("""
+            select s from SunglassesVariantDetails s
+            join s.variant v
+            join v.product p
+            where p.id = :productId
+              and p.deletedAt is null
+              and v.deletedAt is null
+            """)
+    Optional<SunglassesVariantDetails> findByProductId(@Param("productId") Long productId);
 }
 
 

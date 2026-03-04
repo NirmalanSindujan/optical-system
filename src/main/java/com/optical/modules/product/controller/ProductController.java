@@ -5,6 +5,9 @@ import com.optical.modules.product.dto.ProductCreateRequest;
 import com.optical.modules.product.dto.ProductCreateResponse;
 import com.optical.modules.product.dto.LensSubtabResponse;
 import com.optical.modules.product.dto.ProductPageResponse;
+import com.optical.modules.product.dto.SunglassesPageResponse;
+import com.optical.modules.product.dto.SunglassesCreateRequest;
+import com.optical.modules.product.dto.SunglassesDetailResponse;
 import com.optical.modules.product.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -19,9 +22,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -53,6 +58,57 @@ public class ProductController {
     })
     public ProductCreateResponse create(@Valid @RequestBody ProductCreateRequest request) {
         return productService.create(request);
+    }
+
+    @PostMapping("/sunglasses")
+    @Operation(
+            summary = "Create sunglasses",
+            description = "Creates sunglasses using simplified payload from UI. Barcode is always saved as null."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Created successfully", content = @Content(schema = @Schema(implementation = ProductCreateResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Validation error"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized"),
+            @ApiResponse(responseCode = "403", description = "Forbidden"),
+            @ApiResponse(responseCode = "404", description = "Product type/UOM not found"),
+            @ApiResponse(responseCode = "409", description = "Duplicate SKU")
+    })
+    public ProductCreateResponse createSunglasses(@Valid @RequestBody SunglassesCreateRequest request) {
+        return productService.createSunglasses(request);
+    }
+
+    @GetMapping("/sunglasses/{productId}")
+    @Operation(summary = "Get sunglasses by id", description = "Returns detailed sunglasses data by product id.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Found", content = @Content(schema = @Schema(implementation = SunglassesDetailResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Sunglasses not found")
+    })
+    public SunglassesDetailResponse getSunglassesById(@PathVariable Long productId) {
+        return productService.getSunglassesById(productId);
+    }
+
+    @PutMapping("/sunglasses/{productId}")
+    @Operation(summary = "Update sunglasses", description = "Updates sunglasses details by product id.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Updated successfully", content = @Content(schema = @Schema(implementation = SunglassesDetailResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Validation error"),
+            @ApiResponse(responseCode = "404", description = "Sunglasses/Supplier not found")
+    })
+    public SunglassesDetailResponse updateSunglasses(
+            @PathVariable Long productId,
+            @Valid @RequestBody SunglassesCreateRequest request
+    ) {
+        return productService.updateSunglasses(productId, request);
+    }
+
+    @DeleteMapping("/{productId}")
+    @Operation(summary = "Delete product", description = "Soft deletes a product and its variants for any product type.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Deleted successfully"),
+            @ApiResponse(responseCode = "404", description = "Product not found")
+    })
+    public void deleteProduct(@PathVariable Long productId) {
+        productService.deleteProduct(productId);
     }
 
     @GetMapping("/lenses")
@@ -107,7 +163,7 @@ public class ProductController {
 
     @GetMapping("/sunglasses")
     @Operation(summary = "List sunglasses", description = "Paginated sunglasses products.")
-    public ProductPageResponse getSunglasses(
+    public SunglassesPageResponse getSunglasses(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String q
