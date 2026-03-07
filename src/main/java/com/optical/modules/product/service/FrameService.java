@@ -1,21 +1,21 @@
 package com.optical.modules.product.service;
 
 import com.optical.common.exception.ResourceNotFoundException;
+import com.optical.modules.product.dto.FrameCreateRequest;
+import com.optical.modules.product.dto.FrameDetailResponse;
 import com.optical.modules.product.dto.ProductCreateResponse;
+import com.optical.modules.product.dto.ProductListResponse;
+import com.optical.modules.product.dto.ProductPageResponse;
 import com.optical.modules.product.dto.ProductVariantType;
-import com.optical.modules.product.dto.SunglassesCreateRequest;
-import com.optical.modules.product.dto.SunglassesDetailResponse;
-import com.optical.modules.product.dto.SunglassesListResponse;
-import com.optical.modules.product.dto.SunglassesPageResponse;
+import com.optical.modules.product.entity.FrameVariantDetails;
 import com.optical.modules.product.entity.Product;
 import com.optical.modules.product.entity.ProductType;
 import com.optical.modules.product.entity.ProductVariant;
-import com.optical.modules.product.entity.SunglassesVariantDetails;
 import com.optical.modules.product.entity.Uom;
+import com.optical.modules.product.repository.FrameVariantDetailsRepository;
 import com.optical.modules.product.repository.ProductRepository;
 import com.optical.modules.product.repository.ProductTypeRepository;
 import com.optical.modules.product.repository.ProductVariantRepository;
-import com.optical.modules.product.repository.SunglassesVariantDetailsRepository;
 import com.optical.modules.product.repository.UomRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,70 +35,58 @@ import static com.optical.common.util.StringNormalizer.normalize;
 
 @Service
 @RequiredArgsConstructor
-public class SunglassService {
+public class FrameService {
 
-    private static final String DEFAULT_PRODUCT_TYPE_CODE = ProductVariantType.SUNGLASSES.name();
+    private static final String DEFAULT_PRODUCT_TYPE_CODE = ProductVariantType.FRAME.name();
     private static final String DEFAULT_UOM_CODE = "EA";
-    private static final String SUNGLASSES_SKU_PREFIX = "SUN-";
+    private static final String FRAME_SKU_PREFIX = "FRM-";
+    private static final Map<String, String> ALLOWED_FRAME_TYPES = createAllowedFrameTypes();
 
     private final ProductRepository productRepository;
     private final ProductVariantRepository productVariantRepository;
     private final ProductTypeRepository productTypeRepository;
     private final UomRepository uomRepository;
-    private final SunglassesVariantDetailsRepository sunglassesVariantDetailsRepository;
+    private final FrameVariantDetailsRepository frameVariantDetailsRepository;
     private final ProductSupportService productSupportService;
 
-    @Transactional(readOnly = true)
-    public SunglassesPageResponse search(String q, int page, int size) {
-        Page<SunglassesVariantDetails> result = sunglassesVariantDetailsRepository.search(normalize(q), PageRequest.of(page, size));
-        List<SunglassesListResponse> items = result.getContent().stream()
-                .map(this::mapSunglassesListItem)
-                .toList();
-
-        return SunglassesPageResponse.builder()
-                .items(items)
-                .totalCounts(result.getTotalElements())
-                .page(result.getNumber())
-                .size(result.getSize())
-                .totalPages(result.getTotalPages())
-                .build();
-    }
-
     @Transactional
-    public ProductCreateResponse create(SunglassesCreateRequest request) {
+    public ProductCreateResponse create(FrameCreateRequest request) {
         ProductType productType = productTypeRepository.findById(DEFAULT_PRODUCT_TYPE_CODE)
                 .orElseThrow(() -> new ResourceNotFoundException("Default product type not found: " + DEFAULT_PRODUCT_TYPE_CODE));
         Uom uom = uomRepository.findById(DEFAULT_UOM_CODE)
                 .orElseThrow(() -> new ResourceNotFoundException("Default UOM not found: " + DEFAULT_UOM_CODE));
 
-        String companyName = normalizeRequired(request.getCompanyName(), "companyName is required");
-        String productName = normalizeRequired(request.getName(), "name is required");
-        String description = normalizeRequired(request.getDescription(), "description is required");
+        String name = normalizeRequired(request.getName(), "name is required");
+        String code = normalizeRequired(request.getCode(), "code is required");
+        String type = normalizeAndValidateFrameType(request.getType());
+        String color = normalizeRequired(request.getColor(), "color is required");
+        String size = normalizeRequired(request.getSize(), "size is required");
         List<Long> supplierIds = resolveSupplierIds(request);
 
         Product product = new Product();
         product.setProductType(productType);
-        product.setBrandName(companyName);
-        product.setName(productName);
-        product.setDescription(description);
+        product.setName(name);
         product.setIsActive(true);
         Product savedProduct = productRepository.save(product);
         productSupportService.linkSuppliersToProduct(savedProduct, supplierIds);
 
         ProductVariant variant = new ProductVariant();
         variant.setProduct(savedProduct);
-        variant.setSku(generateSunglassesSku(savedProduct.getId()));
+        variant.setSku(generateFrameSku(savedProduct.getId()));
         variant.setBarcode(null);
         variant.setUom(uom);
-        variant.setNotes(normalize(request.getNotes()));
+        variant.setNotes(normalize(request.getExtra()));
         variant.setAttributes(buildAttributes(request, supplierIds));
         variant.setIsActive(true);
         ProductVariant savedVariant = productVariantRepository.save(variant);
 
-        SunglassesVariantDetails details = new SunglassesVariantDetails();
+        FrameVariantDetails details = new FrameVariantDetails();
         details.setVariant(savedVariant);
-        details.setDescription(description);
-        sunglassesVariantDetailsRepository.save(details);
+        details.setFrameCode(code);
+        details.setFrameType(type);
+        details.setColor(color);
+        details.setSize(size);
+        frameVariantDetailsRepository.save(details);
 
         return ProductCreateResponse.builder()
                 .productId(savedProduct.getId())
@@ -106,7 +95,7 @@ public class SunglassService {
                 .productName(savedProduct.getName())
                 .sku(savedVariant.getSku())
                 .barcode(savedVariant.getBarcode())
-                .variantType(ProductVariantType.SUNGLASSES)
+                .variantType(ProductVariantType.FRAME)
                 .productActive(savedProduct.getIsActive())
                 .variantActive(savedVariant.getIsActive())
                 .supplierId(supplierIds.get(0))
@@ -119,39 +108,65 @@ public class SunglassService {
     }
 
     @Transactional(readOnly = true)
-    public SunglassesDetailResponse getById(Long productId) {
-        return mapSunglassesDetail(findSunglassesByProductId(productId));
+    public FrameDetailResponse getById(Long productId) {
+        return mapFrameDetail(findFrameByProductId(productId));
     }
 
     @Transactional
-    public SunglassesDetailResponse update(Long productId, SunglassesCreateRequest request) {
-        SunglassesVariantDetails details = findSunglassesByProductId(productId);
+    public FrameDetailResponse update(Long productId, FrameCreateRequest request) {
+        FrameVariantDetails details = findFrameByProductId(productId);
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
 
-        String companyName = normalizeRequired(request.getCompanyName(), "companyName is required");
-        String productName = normalizeRequired(request.getName(), "name is required");
-        String description = normalizeRequired(request.getDescription(), "description is required");
+        String name = normalizeRequired(request.getName(), "name is required");
+        String code = normalizeRequired(request.getCode(), "code is required");
+        String type = normalizeAndValidateFrameType(request.getType());
+        String color = normalizeRequired(request.getColor(), "color is required");
+        String size = normalizeRequired(request.getSize(), "size is required");
         List<Long> supplierIds = resolveSupplierIds(request);
 
-        product.setBrandName(companyName);
-        product.setName(productName);
-        product.setDescription(description);
-        variant.setNotes(normalize(request.getNotes()));
+        product.setName(name);
+        variant.setNotes(normalize(request.getExtra()));
         variant.setAttributes(buildAttributes(request, supplierIds));
 
-        details.setDescription(description);
+        details.setFrameCode(code);
+        details.setFrameType(type);
+        details.setColor(color);
+        details.setSize(size);
+
         productSupportService.replaceSupplierLinks(product, supplierIds);
 
-        return mapSunglassesDetail(details);
+        return mapFrameDetail(details);
     }
 
-    private SunglassesVariantDetails findSunglassesByProductId(Long productId) {
-        return sunglassesVariantDetailsRepository.findByProductId(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Sunglasses not found"));
+    @Transactional
+    public void delete(Long productId) {
+        findFrameByProductId(productId);
+        productSupportService.deleteProduct(productId);
     }
 
-    private List<Long> resolveSupplierIds(SunglassesCreateRequest request) {
+    @Transactional(readOnly = true)
+    public ProductPageResponse search(String q, int page, int size) {
+        Page<FrameVariantDetails> result = frameVariantDetailsRepository.search(normalize(q), PageRequest.of(page, size));
+        List<ProductListResponse> items = result.getContent().stream()
+                .map(this::mapFrameListItem)
+                .toList();
+
+        return ProductPageResponse.builder()
+                .items(items)
+                .totalCounts(result.getTotalElements())
+                .page(result.getNumber())
+                .size(result.getSize())
+                .totalPages(result.getTotalPages())
+                .build();
+    }
+
+    private FrameVariantDetails findFrameByProductId(Long productId) {
+        return frameVariantDetailsRepository.findByProductId(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Frame not found"));
+    }
+
+    private List<Long> resolveSupplierIds(FrameCreateRequest request) {
         if (request.getSupplierIds() != null && !request.getSupplierIds().isEmpty()) {
             return productSupportService.resolveAndValidateSupplierIds(
                     request.getSupplierIds(),
@@ -167,7 +182,7 @@ public class SunglassService {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "supplierIds or supplierId is required");
     }
 
-    private Map<String, Object> buildAttributes(SunglassesCreateRequest request, List<Long> supplierIds) {
+    private Map<String, Object> buildAttributes(FrameCreateRequest request, List<Long> supplierIds) {
         Map<String, Object> attributes = new HashMap<>();
         attributes.put("supplierIds", supplierIds);
         attributes.put("supplierId", supplierIds.get(0));
@@ -177,45 +192,63 @@ public class SunglassService {
         return attributes;
     }
 
-    private SunglassesListResponse mapSunglassesListItem(SunglassesVariantDetails details) {
+    private ProductListResponse mapFrameListItem(FrameVariantDetails details) {
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
         Map<String, Object> attributes = variant.getAttributes();
 
-        return SunglassesListResponse.builder()
-                .id(product.getId())
-                .modelName(product.getName())
-                .company(product.getBrandName())
-                .purchasePrice(productSupportService.parseBigDecimal(attributes.get("purchasePrice")))
-                .quantity(productSupportService.parseBigDecimal(attributes.get("quantity")))
-                .salesPrice(productSupportService.parseBigDecimal(attributes.get("sellingPrice")))
+        return ProductListResponse.builder()
+                .productId(product.getId())
+                .variantId(variant.getId())
+                .productTypeCode(product.getProductType().getCode())
+                .brandName(product.getBrandName())
+                .name(product.getName())
+                .description(product.getDescription())
+                .productActive(product.getIsActive())
+                .variantActive(variant.getIsActive())
+                .sku(variant.getSku())
+                .barcode(variant.getBarcode())
+                .uomCode(variant.getUom().getCode())
+                .notes(variant.getNotes())
+                .attributes(attributes)
+                .variantType(ProductVariantType.FRAME)
+                .supplierId(productSupportService.parseLong(attributes.get("supplierId")))
                 .suppliers(productSupportService.resolveSupplierInfosForProduct(product.getId(), attributes))
+                .purchasePrice(productSupportService.parseBigDecimal(attributes.get("purchasePrice")))
+                .sellingPrice(productSupportService.parseBigDecimal(attributes.get("sellingPrice")))
+                .quantity(productSupportService.parseBigDecimal(attributes.get("quantity")))
+                .frameCode(details.getFrameCode())
+                .frameType(details.getFrameType())
+                .color(details.getColor())
+                .size(details.getSize())
                 .build();
     }
 
-    private SunglassesDetailResponse mapSunglassesDetail(SunglassesVariantDetails details) {
+    private FrameDetailResponse mapFrameDetail(FrameVariantDetails details) {
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
         Map<String, Object> attributes = variant.getAttributes();
         List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(product.getId(), attributes);
 
-        return SunglassesDetailResponse.builder()
+        return FrameDetailResponse.builder()
                 .productId(product.getId())
                 .variantId(variant.getId())
-                .companyName(product.getBrandName())
                 .name(product.getName())
-                .description(details.getDescription())
+                .code(details.getFrameCode())
+                .type(details.getFrameType())
+                .color(details.getColor())
+                .size(details.getSize())
                 .quantity(productSupportService.parseBigDecimal(attributes.get("quantity")))
                 .purchasePrice(productSupportService.parseBigDecimal(attributes.get("purchasePrice")))
                 .sellingPrice(productSupportService.parseBigDecimal(attributes.get("sellingPrice")))
-                .notes(variant.getNotes())
+                .extra(variant.getNotes())
                 .supplierIds(supplierIds)
                 .suppliers(productSupportService.resolveSupplierInfos(supplierIds))
                 .build();
     }
 
-    private String generateSunglassesSku(Long productId) {
-        String baseSku = SUNGLASSES_SKU_PREFIX + productId;
+    private String generateFrameSku(Long productId) {
+        String baseSku = FRAME_SKU_PREFIX + productId;
         if (!productVariantRepository.existsBySkuAndDeletedAtIsNull(baseSku)) {
             return baseSku;
         }
@@ -230,11 +263,33 @@ public class SunglassService {
         throw new ResponseStatusException(HttpStatus.CONFLICT, "Unable to generate unique SKU");
     }
 
+    private String normalizeAndValidateFrameType(String value) {
+        String normalized = normalizeRequired(value, "type is required");
+        String canonical = ALLOWED_FRAME_TYPES.get(normalized.toLowerCase());
+        if (canonical == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid frame type. Allowed: " + String.join(", ", ALLOWED_FRAME_TYPES.values())
+            );
+        }
+        return canonical;
+    }
+
     private String normalizeRequired(String value, String message) {
         String normalized = normalize(value);
         if (normalized == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
         }
         return normalized;
+    }
+
+    private static Map<String, String> createAllowedFrameTypes() {
+        Map<String, String> allowed = new LinkedHashMap<>();
+        allowed.put("3pieces/rimless", "3Pieces/Rimless");
+        allowed.put("half rimless/supra", "Half Rimless/SUPRA");
+        allowed.put("full metal", "Full Metal");
+        allowed.put("full shell/plastic", "Full Shell/Plastic");
+        allowed.put("goggles", "Goggles");
+        return Map.copyOf(allowed);
     }
 }
