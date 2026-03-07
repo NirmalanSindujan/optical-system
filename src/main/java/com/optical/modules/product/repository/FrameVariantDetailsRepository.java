@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
+
 public interface FrameVariantDetailsRepository extends JpaRepository<FrameVariantDetails, Long> {
 
     @Query("""
@@ -24,6 +26,16 @@ public interface FrameVariantDetailsRepository extends JpaRepository<FrameVarian
               )
             """)
     Page<FrameVariantDetails> search(@Param("q") String q, Pageable pageable);
+
+    @Query("""
+            select f from FrameVariantDetails f
+            join f.variant v
+            join v.product p
+            where p.id = :productId
+              and p.deletedAt is null
+              and v.deletedAt is null
+            """)
+    Optional<FrameVariantDetails> findByProductId(@Param("productId") Long productId);
 }
 
 

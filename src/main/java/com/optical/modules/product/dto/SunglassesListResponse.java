@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Getter
 @Builder
@@ -23,4 +24,5 @@ public class SunglassesListResponse {
     private BigDecimal quantity;
     private BigDecimal purchasePrice;
     private BigDecimal salesPrice;
+    private List<SupplierInfoResponse> suppliers;
 }

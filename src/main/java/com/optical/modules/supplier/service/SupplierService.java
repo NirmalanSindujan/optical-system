@@ -11,10 +11,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+
+import static com.optical.common.util.StringNormalizer.normalize;
 
 @Service
 @RequiredArgsConstructor
@@ -97,10 +98,6 @@ public class SupplierService {
         supplier.setEmail(normalize(request.getEmail()));
         supplier.setAddress(normalize(request.getAddress()));
         supplier.setNotes(normalize(request.getNotes()));
-    }
-
-    private String normalize(String value) {
-        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private SupplierResponse mapToResponse(Supplier supplier) {

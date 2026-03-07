@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Getter
 @Builder
@@ -22,6 +23,8 @@ public class ProductCreateResponse {
     private Boolean productActive;
     private Boolean variantActive;
     private Long supplierId;
+    private List<Long> supplierIds;
+    private List<SupplierInfoResponse> suppliers;
     private BigDecimal purchasePrice;
     private BigDecimal sellingPrice;
     private BigDecimal quantity;

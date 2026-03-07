@@ -8,10 +8,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.util.List;
 
 public interface SupplierRepository extends JpaRepository<Supplier, Long> {
 
     Optional<Supplier> findByIdAndDeletedAtIsNull(Long id);
+    List<Supplier> findByIdInAndDeletedAtIsNull(List<Long> ids);
     boolean existsByPhoneAndDeletedAtIsNull(String phone);
     boolean existsByPhoneAndDeletedAtIsNullAndIdNot(String phone, Long id);
     boolean existsByEmailIgnoreCaseAndDeletedAtIsNull(String email);

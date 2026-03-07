@@ -5,6 +5,8 @@ import com.optical.modules.product.dto.ProductCreateRequest;
 import com.optical.modules.product.dto.ProductCreateResponse;
 import com.optical.modules.product.dto.LensSubtabResponse;
 import com.optical.modules.product.dto.ProductPageResponse;
+import com.optical.modules.product.dto.FrameCreateRequest;
+import com.optical.modules.product.dto.FrameDetailResponse;
 import com.optical.modules.product.dto.SunglassesPageResponse;
 import com.optical.modules.product.dto.SunglassesCreateRequest;
 import com.optical.modules.product.dto.SunglassesDetailResponse;
@@ -60,22 +62,7 @@ public class ProductController {
         return productService.create(request);
     }
 
-    @PostMapping("/sunglasses")
-    @Operation(
-            summary = "Create sunglasses",
-            description = "Creates sunglasses using simplified payload from UI. Barcode is always saved as null."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Created successfully", content = @Content(schema = @Schema(implementation = ProductCreateResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Validation error"),
-            @ApiResponse(responseCode = "401", description = "Unauthorized"),
-            @ApiResponse(responseCode = "403", description = "Forbidden"),
-            @ApiResponse(responseCode = "404", description = "Product type/UOM not found"),
-            @ApiResponse(responseCode = "409", description = "Duplicate SKU")
-    })
-    public ProductCreateResponse createSunglasses(@Valid @RequestBody SunglassesCreateRequest request) {
-        return productService.createSunglasses(request);
-    }
+
 
     @GetMapping("/sunglasses/{productId}")
     @Operation(summary = "Get sunglasses by id", description = "Returns detailed sunglasses data by product id.")
@@ -99,6 +86,57 @@ public class ProductController {
             @Valid @RequestBody SunglassesCreateRequest request
     ) {
         return productService.updateSunglasses(productId, request);
+    }
+
+    @PostMapping("/frames")
+    @Operation(
+            summary = "Create frame",
+            description = "Creates frames using simplified payload from UI. Barcode is always saved as null."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Created successfully", content = @Content(schema = @Schema(implementation = ProductCreateResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Validation error"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized"),
+            @ApiResponse(responseCode = "403", description = "Forbidden"),
+            @ApiResponse(responseCode = "404", description = "Product type/UOM not found"),
+            @ApiResponse(responseCode = "409", description = "Duplicate SKU")
+    })
+    public ProductCreateResponse createFrame(@Valid @RequestBody FrameCreateRequest request) {
+        return productService.createFrame(request);
+    }
+
+    @GetMapping("/frames/{productId}")
+    @Operation(summary = "Get frame by id", description = "Returns detailed frame data by product id.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Found", content = @Content(schema = @Schema(implementation = FrameDetailResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Frame not found")
+    })
+    public FrameDetailResponse getFrameById(@PathVariable Long productId) {
+        return productService.getFrameById(productId);
+    }
+
+    @PutMapping("/frames/{productId}")
+    @Operation(summary = "Update frame", description = "Updates frame details by product id.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Updated successfully", content = @Content(schema = @Schema(implementation = FrameDetailResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Validation error"),
+            @ApiResponse(responseCode = "404", description = "Frame/Supplier not found")
+    })
+    public FrameDetailResponse updateFrame(
+            @PathVariable Long productId,
+            @Valid @RequestBody FrameCreateRequest request
+    ) {
+        return productService.updateFrame(productId, request);
+    }
+
+    @DeleteMapping("/frames/{productId}")
+    @Operation(summary = "Delete frame", description = "Soft deletes frame product and variant by product id.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Deleted successfully"),
+            @ApiResponse(responseCode = "404", description = "Frame not found")
+    })
+    public void deleteFrame(@PathVariable Long productId) {
+        productService.deleteFrame(productId);
     }
 
     @DeleteMapping("/{productId}")
@@ -161,15 +199,6 @@ public class ProductController {
         return productService.searchFrames(q, page, size);
     }
 
-    @GetMapping("/sunglasses")
-    @Operation(summary = "List sunglasses", description = "Paginated sunglasses products.")
-    public SunglassesPageResponse getSunglasses(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String q
-    ) {
-        return productService.searchSunglasses(q, page, size);
-    }
 
     @GetMapping("/accessories")
     @Operation(summary = "List accessories", description = "Paginated accessories products.")

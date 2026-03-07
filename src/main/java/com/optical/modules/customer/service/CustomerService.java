@@ -9,10 +9,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+
+import static com.optical.common.util.StringNormalizer.normalize;
 
 @Service
 @RequiredArgsConstructor
@@ -104,10 +105,6 @@ public class CustomerService {
         customer.setGender(request.getGender());
         customer.setDob(request.getDob());
         customer.setNotes(request.getNotes());
-    }
-
-    private String normalize(String value) {
-        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private CustomerResponse mapToResponse(Customer customer) {
