@@ -4,6 +4,7 @@ import com.optical.common.exception.DuplicateResourceException;
 import com.optical.common.exception.ResourceNotFoundException;
 import com.optical.modules.product.dto.LensSubType;
 import com.optical.modules.product.dto.LensSubtabResponse;
+import com.optical.modules.product.dto.LensDetailResponse;
 import com.optical.modules.product.dto.ProductCreateRequest;
 import com.optical.modules.product.dto.ProductCreateResponse;
 import com.optical.modules.product.dto.ProductListResponse;
@@ -31,9 +32,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import static com.optical.common.util.StringNormalizer.normalize;
@@ -91,7 +90,9 @@ public class ProductService {
         variant.setBarcode(barcode);
         variant.setUom(uom);
         variant.setNotes(normalize(request.getNotes()));
-        variant.setAttributes(enrichAttributes(request));
+        variant.setPurchasePrice(request.getPurchasePrice());
+        variant.setSellingPrice(request.getSellingPrice());
+        variant.setQuantity(request.getQuantity());
         variant.setIsActive(request.getVariantActive() == null ? true : request.getVariantActive());
         ProductVariant savedVariant = productVariantRepository.save(variant);
 
@@ -144,6 +145,13 @@ public class ProductService {
                 .map(this::mapLensItem)
                 .toList();
         return buildPageResponse(result, items);
+    }
+
+    @Transactional(readOnly = true)
+    public LensDetailResponse getLensByVariantId(Long variantId) {
+        LensVariantDetails details = lensVariantDetailsRepository.findByVariantId(variantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lens not found"));
+        return mapLensDetail(details);
     }
 
     @Transactional(readOnly = true)
@@ -292,7 +300,6 @@ public class ProductService {
     private ProductListResponse mapLensItem(LensVariantDetails details) {
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
-        Map<String, Object> attributes = variant.getAttributes();
 
         return ProductListResponse.builder()
                 .productId(product.getId())
@@ -307,12 +314,11 @@ public class ProductService {
                 .barcode(variant.getBarcode())
                 .uomCode(variant.getUom().getCode())
                 .notes(variant.getNotes())
-                .attributes(attributes)
                 .variantType(ProductVariantType.LENS)
-                .supplierId(productSupportService.parseLong(attributes.get("supplierId")))
-                .purchasePrice(productSupportService.parseBigDecimal(attributes.get("purchasePrice")))
-                .sellingPrice(productSupportService.parseBigDecimal(attributes.get("sellingPrice")))
-                .quantity(productSupportService.parseBigDecimal(attributes.get("quantity")))
+                .supplierId(firstSupplierId(product.getId()))
+                .purchasePrice(variant.getPurchasePrice())
+                .sellingPrice(variant.getSellingPrice())
+                .quantity(variant.getQuantity())
                 .lensSubType(parseLensSubType(details.getLensSubType()))
                 .material(details.getMaterial())
                 .lensIndex(details.getLensIndex())
@@ -326,10 +332,38 @@ public class ProductService {
                 .build();
     }
 
+    private LensDetailResponse mapLensDetail(LensVariantDetails details) {
+        ProductVariant variant = details.getVariant();
+        Product product = variant.getProduct();
+        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(product.getId());
+
+        return LensDetailResponse.builder()
+                .productId(product.getId())
+                .variantId(variant.getId())
+                .companyName(product.getBrandName())
+                .name(product.getName())
+                .lensSubType(parseLensSubType(details.getLensSubType()))
+                .material(details.getMaterial())
+                .index(details.getLensIndex())
+                .type(details.getLensType())
+                .coatingCode(details.getCoatingCode())
+                .sph(details.getSph())
+                .cyl(details.getCyl())
+                .addPower(details.getAddPower())
+                .color(details.getColor())
+                .baseCurve(details.getBaseCurve())
+                .quantity(variant.getQuantity())
+                .purchasePrice(variant.getPurchasePrice())
+                .sellingPrice(variant.getSellingPrice())
+                .extra(variant.getNotes())
+                .supplierIds(supplierIds)
+                .suppliers(productSupportService.resolveSupplierInfos(supplierIds))
+                .build();
+    }
+
     private ProductListResponse mapAccessoryItem(AccessoryVariantDetails details) {
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
-        Map<String, Object> attributes = variant.getAttributes();
 
         return ProductListResponse.builder()
                 .productId(product.getId())
@@ -344,33 +378,13 @@ public class ProductService {
                 .barcode(variant.getBarcode())
                 .uomCode(variant.getUom().getCode())
                 .notes(variant.getNotes())
-                .attributes(attributes)
                 .variantType(ProductVariantType.ACCESSORY)
-                .supplierId(productSupportService.parseLong(attributes.get("supplierId")))
-                .purchasePrice(productSupportService.parseBigDecimal(attributes.get("purchasePrice")))
-                .sellingPrice(productSupportService.parseBigDecimal(attributes.get("sellingPrice")))
-                .quantity(productSupportService.parseBigDecimal(attributes.get("quantity")))
+                .supplierId(firstSupplierId(product.getId()))
+                .purchasePrice(variant.getPurchasePrice())
+                .sellingPrice(variant.getSellingPrice())
+                .quantity(variant.getQuantity())
                 .itemType(details.getItemType())
                 .build();
-    }
-
-    private Map<String, Object> enrichAttributes(ProductCreateRequest request) {
-        Map<String, Object> attributes = request.getAttributes() == null
-                ? new HashMap<>()
-                : new HashMap<>(request.getAttributes());
-        if (request.getSupplierId() != null) {
-            attributes.put("supplierId", request.getSupplierId());
-        }
-        if (request.getPurchasePrice() != null) {
-            attributes.put("purchasePrice", request.getPurchasePrice());
-        }
-        if (request.getSellingPrice() != null) {
-            attributes.put("sellingPrice", request.getSellingPrice());
-        }
-        if (request.getQuantity() != null) {
-            attributes.put("quantity", request.getQuantity());
-        }
-        return attributes;
     }
 
     private void validateCommercialFields(ProductCreateRequest request) {
@@ -425,5 +439,10 @@ public class ProductService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
         }
         return normalized;
+    }
+
+    private Long firstSupplierId(Long productId) {
+        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(productId);
+        return supplierIds.isEmpty() ? null : supplierIds.get(0);
     }
 }

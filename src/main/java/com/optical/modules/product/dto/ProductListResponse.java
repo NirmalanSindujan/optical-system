@@ -5,7 +5,6 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.math.BigDecimal;
-import java.util.Map;
 import java.util.List;
 
 @Getter
@@ -25,7 +24,6 @@ public class ProductListResponse {
     private String barcode;
     private String uomCode;
     private String notes;
-    private Map<String, Object> attributes;
     private ProductVariantType variantType;
     private Long supplierId;
     private List<SupplierInfoResponse> suppliers;

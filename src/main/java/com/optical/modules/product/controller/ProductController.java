@@ -1,6 +1,7 @@
 package com.optical.modules.product.controller;
 
 import com.optical.modules.product.dto.LensSubType;
+import com.optical.modules.product.dto.LensDetailResponse;
 import com.optical.modules.product.dto.LensSubtabResponse;
 import com.optical.modules.product.dto.ProductCreateRequest;
 import com.optical.modules.product.dto.ProductCreateResponse;
@@ -74,6 +75,16 @@ public class ProductController {
             @RequestParam(required = false) String q
     ) {
         return productService.searchLenses(q, page, size);
+    }
+
+    @GetMapping("/lenses/{variantId}")
+    @Operation(summary = "Get lens by variant id", description = "Returns detailed lens data by variant id.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Found", content = @Content(schema = @Schema(implementation = LensDetailResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Lens not found")
+    })
+    public LensDetailResponse getLensByVariantId(@PathVariable Long variantId) {
+        return productService.getLensByVariantId(variantId);
     }
 
     @GetMapping("/lenses/subtabs")

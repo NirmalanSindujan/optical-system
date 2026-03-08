@@ -81,27 +81,12 @@ public class ProductSupportService {
         productRepository.delete(product);
     }
 
-    public List<Long> resolveSupplierIdsForProduct(Long productId, Map<String, Object> attributes) {
-        List<Long> supplierIds = supplierProductRepository.findActiveSupplierIdsByProductId(productId);
-        if (!supplierIds.isEmpty()) {
-            return supplierIds;
-        }
-
-        if (attributes == null || attributes.isEmpty()) {
-            return List.of();
-        }
-
-        List<Long> attributeSupplierIds = parseLongList(attributes.get("supplierIds"));
-        if (!attributeSupplierIds.isEmpty()) {
-            return attributeSupplierIds;
-        }
-
-        Long supplierId = parseLong(attributes.get("supplierId"));
-        return supplierId == null ? List.of() : List.of(supplierId);
+    public List<Long> resolveSupplierIdsForProduct(Long productId) {
+        return supplierProductRepository.findActiveSupplierIdsByProductId(productId);
     }
 
-    public List<SupplierInfoResponse> resolveSupplierInfosForProduct(Long productId, Map<String, Object> attributes) {
-        return resolveSupplierInfos(resolveSupplierIdsForProduct(productId, attributes));
+    public List<SupplierInfoResponse> resolveSupplierInfosForProduct(Long productId) {
+        return resolveSupplierInfos(resolveSupplierIdsForProduct(productId));
     }
 
     public List<SupplierInfoResponse> resolveSupplierInfos(List<Long> supplierIds) {
@@ -133,20 +118,6 @@ public class ProductSupportService {
         }
     }
 
-    public Long parseLong(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        try {
-            return Long.parseLong(String.valueOf(value));
-        } catch (NumberFormatException ex) {
-            return null;
-        }
-    }
-
     private SupplierInfoResponse mapSupplierInfo(Supplier supplier) {
         return SupplierInfoResponse.builder()
                 .id(supplier.getId())
@@ -154,16 +125,5 @@ public class ProductSupportService {
                 .phone(supplier.getPhone())
                 .email(supplier.getEmail())
                 .build();
-    }
-
-    private List<Long> parseLongList(Object value) {
-        if (!(value instanceof List<?> rawList)) {
-            return List.of();
-        }
-        return rawList.stream()
-                .map(this::parseLong)
-                .filter(id -> id != null && id > 0)
-                .distinct()
-                .toList();
     }
 }

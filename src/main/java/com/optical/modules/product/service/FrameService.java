@@ -25,7 +25,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,7 +75,9 @@ public class FrameService {
         variant.setBarcode(null);
         variant.setUom(uom);
         variant.setNotes(normalize(request.getExtra()));
-        variant.setAttributes(buildAttributes(request, supplierIds));
+        variant.setPurchasePrice(request.getPurchasePrice());
+        variant.setSellingPrice(request.getSellingPrice());
+        variant.setQuantity(request.getQuantity());
         variant.setIsActive(true);
         ProductVariant savedVariant = productVariantRepository.save(variant);
 
@@ -127,7 +128,9 @@ public class FrameService {
 
         product.setName(name);
         variant.setNotes(normalize(request.getExtra()));
-        variant.setAttributes(buildAttributes(request, supplierIds));
+        variant.setPurchasePrice(request.getPurchasePrice());
+        variant.setSellingPrice(request.getSellingPrice());
+        variant.setQuantity(request.getQuantity());
 
         details.setFrameCode(code);
         details.setFrameType(type);
@@ -182,20 +185,9 @@ public class FrameService {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "supplierIds or supplierId is required");
     }
 
-    private Map<String, Object> buildAttributes(FrameCreateRequest request, List<Long> supplierIds) {
-        Map<String, Object> attributes = new HashMap<>();
-        attributes.put("supplierIds", supplierIds);
-        attributes.put("supplierId", supplierIds.get(0));
-        attributes.put("purchasePrice", request.getPurchasePrice());
-        attributes.put("sellingPrice", request.getSellingPrice());
-        attributes.put("quantity", request.getQuantity());
-        return attributes;
-    }
-
     private ProductListResponse mapFrameListItem(FrameVariantDetails details) {
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
-        Map<String, Object> attributes = variant.getAttributes();
 
         return ProductListResponse.builder()
                 .productId(product.getId())
@@ -210,13 +202,12 @@ public class FrameService {
                 .barcode(variant.getBarcode())
                 .uomCode(variant.getUom().getCode())
                 .notes(variant.getNotes())
-                .attributes(attributes)
                 .variantType(ProductVariantType.FRAME)
-                .supplierId(productSupportService.parseLong(attributes.get("supplierId")))
-                .suppliers(productSupportService.resolveSupplierInfosForProduct(product.getId(), attributes))
-                .purchasePrice(productSupportService.parseBigDecimal(attributes.get("purchasePrice")))
-                .sellingPrice(productSupportService.parseBigDecimal(attributes.get("sellingPrice")))
-                .quantity(productSupportService.parseBigDecimal(attributes.get("quantity")))
+                .supplierId(firstSupplierId(product.getId()))
+                .suppliers(productSupportService.resolveSupplierInfosForProduct(product.getId()))
+                .purchasePrice(variant.getPurchasePrice())
+                .sellingPrice(variant.getSellingPrice())
+                .quantity(variant.getQuantity())
                 .frameCode(details.getFrameCode())
                 .frameType(details.getFrameType())
                 .color(details.getColor())
@@ -227,8 +218,7 @@ public class FrameService {
     private FrameDetailResponse mapFrameDetail(FrameVariantDetails details) {
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
-        Map<String, Object> attributes = variant.getAttributes();
-        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(product.getId(), attributes);
+        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(product.getId());
 
         return FrameDetailResponse.builder()
                 .productId(product.getId())
@@ -238,9 +228,9 @@ public class FrameService {
                 .type(details.getFrameType())
                 .color(details.getColor())
                 .size(details.getSize())
-                .quantity(productSupportService.parseBigDecimal(attributes.get("quantity")))
-                .purchasePrice(productSupportService.parseBigDecimal(attributes.get("purchasePrice")))
-                .sellingPrice(productSupportService.parseBigDecimal(attributes.get("sellingPrice")))
+                .quantity(variant.getQuantity())
+                .purchasePrice(variant.getPurchasePrice())
+                .sellingPrice(variant.getSellingPrice())
                 .extra(variant.getNotes())
                 .supplierIds(supplierIds)
                 .suppliers(productSupportService.resolveSupplierInfos(supplierIds))
@@ -281,6 +271,11 @@ public class FrameService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
         }
         return normalized;
+    }
+
+    private Long firstSupplierId(Long productId) {
+        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(productId);
+        return supplierIds.isEmpty() ? null : supplierIds.get(0);
     }
 
     private static Map<String, String> createAllowedFrameTypes() {

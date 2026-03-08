@@ -12,13 +12,10 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
-import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.Where;
-import org.hibernate.type.SqlTypes;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.math.BigDecimal;
 
 @Entity
 @Table(
@@ -29,7 +26,10 @@ import java.util.Map;
         },
         indexes = {
                 @Index(name = "idx_product_variant_product_id", columnList = "product_id"),
-                @Index(name = "idx_product_variant_uom_code", columnList = "uom_code")
+                @Index(name = "idx_product_variant_uom_code", columnList = "uom_code"),
+                @Index(name = "idx_product_variant_purchase_price", columnList = "purchase_price"),
+                @Index(name = "idx_product_variant_selling_price", columnList = "selling_price"),
+                @Index(name = "idx_product_variant_quantity", columnList = "quantity")
         }
 )
 @Getter
@@ -56,9 +56,14 @@ public class ProductVariant extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "jsonb")
-    private Map<String, Object> attributes = new HashMap<>();
+    @Column(name = "purchase_price", precision = 12, scale = 2)
+    private BigDecimal purchasePrice;
+
+    @Column(name = "selling_price", precision = 12, scale = 2)
+    private BigDecimal sellingPrice;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal quantity;
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;

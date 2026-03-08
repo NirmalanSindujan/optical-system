@@ -129,7 +129,9 @@ CREATE TABLE product_variant (
     barcode VARCHAR(100),
     uom_code VARCHAR(30) NOT NULL REFERENCES uom(code),
     notes TEXT,
-    attributes JSONB NOT NULL DEFAULT '{}'::jsonb,
+    purchase_price NUMERIC(12,2),
+    selling_price NUMERIC(12,2),
+    quantity NUMERIC(12,2),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
@@ -151,8 +153,14 @@ CREATE INDEX idx_product_variant_product_id
 CREATE INDEX idx_product_variant_uom_code
     ON product_variant(uom_code);
 
-CREATE INDEX idx_product_variant_attributes_gin
-    ON product_variant USING GIN (attributes);
+CREATE INDEX idx_product_variant_purchase_price
+    ON product_variant(purchase_price);
+
+CREATE INDEX idx_product_variant_selling_price
+    ON product_variant(selling_price);
+
+CREATE INDEX idx_product_variant_quantity
+    ON product_variant(quantity);
 
 CREATE TABLE lens_variant_details (
     variant_id BIGINT PRIMARY KEY REFERENCES product_variant(id) ON DELETE CASCADE,

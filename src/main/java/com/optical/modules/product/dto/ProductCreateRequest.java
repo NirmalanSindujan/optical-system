@@ -9,7 +9,6 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
-import java.util.Map;
 
 @Getter
 @Setter
@@ -40,7 +39,6 @@ public class ProductCreateRequest {
     private String uomCode;
 
     private String notes;
-    private Map<String, Object> attributes;
     private Boolean variantActive;
     @Schema(description = "Supplier reference id", requiredMode = Schema.RequiredMode.REQUIRED)
     private Long supplierId;

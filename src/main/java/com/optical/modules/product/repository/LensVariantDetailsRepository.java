@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface LensVariantDetailsRepository extends JpaRepository<LensVariantDetails, Long> {
 
@@ -61,6 +62,16 @@ public interface LensVariantDetailsRepository extends JpaRepository<LensVariantD
             order by l.lensSubType
             """)
     List<LensSubtabProjection> findLensSubtabs();
+
+    @Query("""
+            select l from LensVariantDetails l
+            join l.variant v
+            join v.product p
+            where v.id = :variantId
+              and p.deletedAt is null
+              and v.deletedAt is null
+            """)
+    Optional<LensVariantDetails> findByVariantId(@Param("variantId") Long variantId);
 }
 
 

@@ -25,7 +25,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -92,7 +91,9 @@ public class AccessoryService {
         variant.setBarcode(null);
         variant.setUom(uom);
         variant.setNotes(normalize(request.getExtra()));
-        variant.setAttributes(buildAttributes(request, supplierIds));
+        variant.setPurchasePrice(request.getPurchasePrice());
+        variant.setSellingPrice(request.getSellingPrice());
+        variant.setQuantity(request.getQuantity());
         variant.setIsActive(true);
         ProductVariant savedVariant = productVariantRepository.save(variant);
 
@@ -140,7 +141,9 @@ public class AccessoryService {
         product.setBrandName(companyName);
         product.setName(modelName);
         variant.setNotes(normalize(request.getExtra()));
-        variant.setAttributes(buildAttributes(request, supplierIds));
+        variant.setPurchasePrice(request.getPurchasePrice());
+        variant.setSellingPrice(request.getSellingPrice());
+        variant.setQuantity(request.getQuantity());
 
         details.setItemType(itemType);
         productSupportService.replaceSupplierLinks(product, supplierIds);
@@ -178,26 +181,9 @@ public class AccessoryService {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "supplierIds or supplierId is required");
     }
 
-    private Map<String, Object> buildAttributes(AccessoryCreateRequest request, List<Long> supplierIds) {
-        Map<String, Object> attributes = new HashMap<>();
-        if (!supplierIds.isEmpty()) {
-            attributes.put("supplierIds", supplierIds);
-            attributes.put("supplierId", supplierIds.get(0));
-        }
-        if (request.getPurchasePrice() != null) {
-            attributes.put("purchasePrice", request.getPurchasePrice());
-        }
-        attributes.put("sellingPrice", request.getSellingPrice());
-        if (request.getQuantity() != null) {
-            attributes.put("quantity", request.getQuantity());
-        }
-        return attributes;
-    }
-
     private ProductListResponse mapAccessoryListItem(AccessoryVariantDetails details) {
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
-        Map<String, Object> attributes = variant.getAttributes();
 
         return ProductListResponse.builder()
                 .productId(product.getId())
@@ -212,13 +198,12 @@ public class AccessoryService {
                 .barcode(variant.getBarcode())
                 .uomCode(variant.getUom().getCode())
                 .notes(variant.getNotes())
-                .attributes(attributes)
                 .variantType(ProductVariantType.ACCESSORY)
-                .supplierId(productSupportService.parseLong(attributes.get("supplierId")))
-                .suppliers(productSupportService.resolveSupplierInfosForProduct(product.getId(), attributes))
-                .purchasePrice(productSupportService.parseBigDecimal(attributes.get("purchasePrice")))
-                .sellingPrice(productSupportService.parseBigDecimal(attributes.get("sellingPrice")))
-                .quantity(productSupportService.parseBigDecimal(attributes.get("quantity")))
+                .supplierId(firstSupplierId(product.getId()))
+                .suppliers(productSupportService.resolveSupplierInfosForProduct(product.getId()))
+                .purchasePrice(variant.getPurchasePrice())
+                .sellingPrice(variant.getSellingPrice())
+                .quantity(variant.getQuantity())
                 .itemType(details.getItemType())
                 .build();
     }
@@ -226,8 +211,7 @@ public class AccessoryService {
     private AccessoryDetailResponse mapAccessoryDetail(AccessoryVariantDetails details) {
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
-        Map<String, Object> attributes = variant.getAttributes();
-        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(product.getId(), attributes);
+        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(product.getId());
 
         return AccessoryDetailResponse.builder()
                 .productId(product.getId())
@@ -235,9 +219,9 @@ public class AccessoryService {
                 .companyName(product.getBrandName())
                 .modelName(product.getName())
                 .type(details.getItemType())
-                .quantity(productSupportService.parseBigDecimal(attributes.get("quantity")))
-                .purchasePrice(productSupportService.parseBigDecimal(attributes.get("purchasePrice")))
-                .sellingPrice(productSupportService.parseBigDecimal(attributes.get("sellingPrice")))
+                .quantity(variant.getQuantity())
+                .purchasePrice(variant.getPurchasePrice())
+                .sellingPrice(variant.getSellingPrice())
                 .extra(variant.getNotes())
                 .supplierIds(supplierIds)
                 .suppliers(productSupportService.resolveSupplierInfos(supplierIds))
@@ -304,6 +288,11 @@ public class AccessoryService {
 
     private Long firstSupplierId(List<Long> supplierIds) {
         return supplierIds == null || supplierIds.isEmpty() ? null : supplierIds.get(0);
+    }
+
+    private Long firstSupplierId(Long productId) {
+        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(productId);
+        return firstSupplierId(supplierIds);
     }
 
     private String normalizeRequired(String value, String message) {

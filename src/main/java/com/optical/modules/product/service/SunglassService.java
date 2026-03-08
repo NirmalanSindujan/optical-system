@@ -25,9 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static com.optical.common.util.StringNormalizer.normalize;
@@ -90,7 +88,9 @@ public class SunglassService {
         variant.setBarcode(null);
         variant.setUom(uom);
         variant.setNotes(normalize(request.getNotes()));
-        variant.setAttributes(buildAttributes(request, supplierIds));
+        variant.setPurchasePrice(request.getPurchasePrice());
+        variant.setSellingPrice(request.getSellingPrice());
+        variant.setQuantity(request.getQuantity());
         variant.setIsActive(true);
         ProductVariant savedVariant = productVariantRepository.save(variant);
 
@@ -138,7 +138,9 @@ public class SunglassService {
         product.setName(productName);
         product.setDescription(description);
         variant.setNotes(normalize(request.getNotes()));
-        variant.setAttributes(buildAttributes(request, supplierIds));
+        variant.setPurchasePrice(request.getPurchasePrice());
+        variant.setSellingPrice(request.getSellingPrice());
+        variant.setQuantity(request.getQuantity());
 
         details.setDescription(description);
         productSupportService.replaceSupplierLinks(product, supplierIds);
@@ -167,37 +169,25 @@ public class SunglassService {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "supplierIds or supplierId is required");
     }
 
-    private Map<String, Object> buildAttributes(SunglassesCreateRequest request, List<Long> supplierIds) {
-        Map<String, Object> attributes = new HashMap<>();
-        attributes.put("supplierIds", supplierIds);
-        attributes.put("supplierId", supplierIds.get(0));
-        attributes.put("purchasePrice", request.getPurchasePrice());
-        attributes.put("sellingPrice", request.getSellingPrice());
-        attributes.put("quantity", request.getQuantity());
-        return attributes;
-    }
-
     private SunglassesListResponse mapSunglassesListItem(SunglassesVariantDetails details) {
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
-        Map<String, Object> attributes = variant.getAttributes();
 
         return SunglassesListResponse.builder()
                 .id(product.getId())
                 .modelName(product.getName())
                 .company(product.getBrandName())
-                .purchasePrice(productSupportService.parseBigDecimal(attributes.get("purchasePrice")))
-                .quantity(productSupportService.parseBigDecimal(attributes.get("quantity")))
-                .salesPrice(productSupportService.parseBigDecimal(attributes.get("sellingPrice")))
-                .suppliers(productSupportService.resolveSupplierInfosForProduct(product.getId(), attributes))
+                .purchasePrice(variant.getPurchasePrice())
+                .quantity(variant.getQuantity())
+                .salesPrice(variant.getSellingPrice())
+                .suppliers(productSupportService.resolveSupplierInfosForProduct(product.getId()))
                 .build();
     }
 
     private SunglassesDetailResponse mapSunglassesDetail(SunglassesVariantDetails details) {
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
-        Map<String, Object> attributes = variant.getAttributes();
-        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(product.getId(), attributes);
+        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(product.getId());
 
         return SunglassesDetailResponse.builder()
                 .productId(product.getId())
@@ -205,9 +195,9 @@ public class SunglassService {
                 .companyName(product.getBrandName())
                 .name(product.getName())
                 .description(details.getDescription())
-                .quantity(productSupportService.parseBigDecimal(attributes.get("quantity")))
-                .purchasePrice(productSupportService.parseBigDecimal(attributes.get("purchasePrice")))
-                .sellingPrice(productSupportService.parseBigDecimal(attributes.get("sellingPrice")))
+                .quantity(variant.getQuantity())
+                .purchasePrice(variant.getPurchasePrice())
+                .sellingPrice(variant.getSellingPrice())
                 .notes(variant.getNotes())
                 .supplierIds(supplierIds)
                 .suppliers(productSupportService.resolveSupplierInfos(supplierIds))
