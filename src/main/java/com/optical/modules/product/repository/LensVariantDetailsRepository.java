@@ -72,6 +72,16 @@ public interface LensVariantDetailsRepository extends JpaRepository<LensVariantD
               and v.deletedAt is null
             """)
     Optional<LensVariantDetails> findByVariantId(@Param("variantId") Long variantId);
+
+    @Query("""
+            select l from LensVariantDetails l
+            join l.variant v
+            join v.product p
+            where p.id = :productId
+              and p.deletedAt is null
+              and v.deletedAt is null
+            """)
+    Optional<LensVariantDetails> findByProductId(@Param("productId") Long productId);
 }
 
 

@@ -5,6 +5,8 @@ import com.optical.modules.product.dto.LensAdditionMethod;
 import com.optical.modules.product.dto.LensSubType;
 import com.optical.modules.product.dto.SingleVisionCreateRequest;
 import com.optical.modules.product.dto.SingleVisionCreateResponse;
+import com.optical.modules.product.dto.SingleVisionDetailResponse;
+import com.optical.modules.product.dto.SingleVisionUpdateRequest;
 import com.optical.modules.product.dto.SingleVisionVariantResponse;
 import com.optical.modules.product.entity.LensVariantDetails;
 import com.optical.modules.product.entity.Product;
@@ -139,20 +141,63 @@ public class SingleVisionService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
+    public SingleVisionDetailResponse getById(Long productId) {
+        return mapSingleVisionDetail(findSingleVisionByProductId(productId));
+    }
+
+    @Transactional
+    public SingleVisionDetailResponse update(Long productId, SingleVisionUpdateRequest request) {
+        LensVariantDetails details = findSingleVisionByProductId(productId);
+        ProductVariant variant = details.getVariant();
+        Product product = variant.getProduct();
+
+        String material = normalizeAndValidateMaterial(request.getMaterial());
+        String type = normalizeAndValidateLensType(request.getType());
+        String companyName = normalizeRequired(request.getCompanyName(), "companyName is required");
+        String productName = normalizeRequired(request.getName(), "name is required");
+        List<Long> supplierIds = resolveSupplierIds(request.getSupplierIds(), request.getSupplierId());
+
+        if (request.getIndex() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "index is required");
+        }
+
+        BigDecimal sph = requiredDecimal(request.getSph(), "sph is required");
+        validateQuarterStep(sph, "sph");
+        validateRange(sph, SPH_MIN, SPH_MAX, "sph");
+
+        BigDecimal cyl = request.getCyl();
+        if (cyl != null) {
+            validateQuarterStep(cyl, "cyl");
+            validateRange(cyl, CYL_MIN, CYL_MAX, "cyl");
+        }
+
+        if (request.getSellingPrice() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sellingPrice is required");
+        }
+        if (request.getSellingPrice().compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sellingPrice cannot be negative");
+        }
+
+        product.setBrandName(companyName);
+        product.setName(productName);
+
+        variant.setNotes(normalize(request.getExtra()));
+        variant.setSellingPrice(request.getSellingPrice());
+
+        details.setMaterial(material);
+        details.setLensIndex(request.getIndex());
+        details.setLensType(type);
+        details.setSph(sph);
+        details.setCyl(cyl);
+
+        productSupportService.replaceSupplierLinks(product, supplierIds);
+
+        return mapSingleVisionDetail(details);
+    }
+
     private List<Long> resolveSupplierIds(SingleVisionCreateRequest request) {
-        if (request.getSupplierIds() != null && !request.getSupplierIds().isEmpty()) {
-            return productSupportService.resolveAndValidateSupplierIds(
-                    request.getSupplierIds(),
-                    "At least one valid supplier id is required"
-            );
-        }
-        if (request.getSupplierId() != null) {
-            return productSupportService.resolveAndValidateSupplierIds(
-                    List.of(request.getSupplierId()),
-                    "supplierIds or supplierId is required"
-            );
-        }
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "supplierIds or supplierId is required");
+        return resolveSupplierIds(request.getSupplierIds(), request.getSupplierId());
     }
 
     private List<PowerPair> buildPowerPairs(SingleVisionCreateRequest request) {
@@ -263,6 +308,17 @@ public class SingleVisionService {
         return canonical;
     }
 
+    private LensVariantDetails findSingleVisionByProductId(Long productId) {
+        LensVariantDetails details = lensVariantDetailsRepository.findByProductId(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Single vision lens not found"));
+
+        if (!LensSubType.SINGLE_VISION.name().equals(details.getLensSubType())) {
+            throw new ResourceNotFoundException("Single vision lens not found");
+        }
+
+        return details;
+    }
+
     private BigDecimal requiredDecimal(BigDecimal value, String message) {
         if (value == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
@@ -305,10 +361,51 @@ public class SingleVisionService {
         return normalized;
     }
 
+    private List<Long> resolveSupplierIds(List<Long> supplierIds, Long supplierId) {
+        if (supplierIds != null && !supplierIds.isEmpty()) {
+            return productSupportService.resolveAndValidateSupplierIds(
+                    supplierIds,
+                    "At least one valid supplier id is required"
+            );
+        }
+        if (supplierId != null) {
+            return productSupportService.resolveAndValidateSupplierIds(
+                    List.of(supplierId),
+                    "supplierIds or supplierId is required"
+            );
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "supplierIds or supplierId is required");
+    }
+
     private String buildSingleLenseName(String baseName , PowerPair pair){
         String sphPrefix =  pair.sph.toString();
         String cylPrefix =  pair.cyl != null ? "/" +pair.cyl.toString() : "";
         return baseName + "("  +  sphPrefix  + cylPrefix + ")";
+    }
+
+    private SingleVisionDetailResponse mapSingleVisionDetail(LensVariantDetails details) {
+        ProductVariant variant = details.getVariant();
+        Product product = variant.getProduct();
+        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(product.getId());
+
+        return SingleVisionDetailResponse.builder()
+                .productId(product.getId())
+                .variantId(variant.getId())
+                .companyName(product.getBrandName())
+                .name(product.getName())
+                .lensSubType(LensSubType.SINGLE_VISION)
+                .material(details.getMaterial())
+                .type(details.getLensType())
+                .index(details.getLensIndex())
+                .sph(details.getSph())
+                .cyl(details.getCyl())
+                .quantity(variant.getQuantity())
+                .purchasePrice(variant.getPurchasePrice())
+                .sellingPrice(variant.getSellingPrice())
+                .extra(variant.getNotes())
+                .supplierIds(supplierIds)
+                .suppliers(productSupportService.resolveSupplierInfos(supplierIds))
+                .build();
     }
 
     private static Map<String, String> createAllowedMaterials() {
