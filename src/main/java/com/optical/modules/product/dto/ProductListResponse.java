@@ -26,6 +26,7 @@ public class ProductListResponse {
     private String notes;
     private ProductVariantType variantType;
     private Long supplierId;
+    private List<Long> supplierIds;
     private List<SupplierInfoResponse> suppliers;
     private BigDecimal purchasePrice;
     private BigDecimal sellingPrice;

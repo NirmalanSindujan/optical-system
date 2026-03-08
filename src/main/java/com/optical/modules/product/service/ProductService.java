@@ -300,6 +300,7 @@ public class ProductService {
     private ProductListResponse mapLensItem(LensVariantDetails details) {
         ProductVariant variant = details.getVariant();
         Product product = variant.getProduct();
+        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(product.getId());
 
         return ProductListResponse.builder()
                 .productId(product.getId())
@@ -315,7 +316,9 @@ public class ProductService {
                 .uomCode(variant.getUom().getCode())
                 .notes(variant.getNotes())
                 .variantType(ProductVariantType.LENS)
-                .supplierId(firstSupplierId(product.getId()))
+                .supplierId(supplierIds.isEmpty() ? null : supplierIds.get(0))
+                .supplierIds(supplierIds)
+                .suppliers(productSupportService.resolveSupplierInfos(supplierIds))
                 .purchasePrice(variant.getPurchasePrice())
                 .sellingPrice(variant.getSellingPrice())
                 .quantity(variant.getQuantity())
@@ -328,6 +331,7 @@ public class ProductService {
                 .cyl(details.getCyl())
                 .addPower(details.getAddPower())
                 .lensColor(details.getColor())
+                .color(details.getColor())
                 .baseCurve(details.getBaseCurve())
                 .build();
     }
