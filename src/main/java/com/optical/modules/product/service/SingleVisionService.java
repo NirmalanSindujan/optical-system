@@ -73,6 +73,7 @@ public class SingleVisionService {
         if (request.getAdditionMethod() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "additionMethod is required");
         }
+
         validateCommercialFields(request);
         List<Long> supplierIds = resolveSupplierIds(request);
         List<PowerPair> powerPairs = buildPowerPairs(request);
@@ -92,6 +93,7 @@ public class SingleVisionService {
             variant.setNotes(normalize(request.getExtra()));
             variant.setPurchasePrice(request.getPurchasePrice());
             variant.setSellingPrice(request.getSellingPrice());
+            variant.setQuantity(request.getQuantity());
             variant.setIsActive(true);
             ProductVariant savedVariant = productVariantRepository.save(variant);
 
@@ -129,6 +131,7 @@ public class SingleVisionService {
                 .suppliers(productSupportService.resolveSupplierInfos(supplierIds))
                 .purchasePrice(request.getPurchasePrice())
                 .sellingPrice(request.getSellingPrice())
+                .quantity(request.getQuantity())
                 .extra(normalize(request.getExtra()))
                 .totalProductsCreated(productIds.size())
                 .totalVariantsCreated(variants.size())
@@ -225,11 +228,17 @@ public class SingleVisionService {
         if (request.getSellingPrice() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sellingPrice is required");
         }
+        if (request.getQuantity() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "quantity is required");
+        }
         if (request.getPurchasePrice().compareTo(BigDecimal.ZERO) < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "purchasePrice cannot be negative");
         }
         if (request.getSellingPrice().compareTo(BigDecimal.ZERO) < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sellingPrice cannot be negative");
+        }
+        if (request.getQuantity().compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "quantity cannot be negative");
         }
     }
 

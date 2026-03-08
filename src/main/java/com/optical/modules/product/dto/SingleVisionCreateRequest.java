@@ -42,6 +42,11 @@ public class SingleVisionCreateRequest {
     @Schema(description = "Add as a single power or generate a full range", requiredMode = Schema.RequiredMode.REQUIRED)
     private LensAdditionMethod additionMethod;
 
+
+    @NotNull
+    @Schema(description = "Quantity", requiredMode = Schema.RequiredMode.REQUIRED)
+    private BigDecimal quantity;
+
     @Schema(description = "When true, CYL values are required and combinations will be generated")
     private Boolean cylEnabled;
 

@@ -26,6 +26,7 @@ public class SingleVisionCreateResponse {
     private List<SupplierInfoResponse> suppliers;
     private BigDecimal purchasePrice;
     private BigDecimal sellingPrice;
+    private BigDecimal quantity;
     private String extra;
     private int totalProductsCreated;
     private int totalVariantsCreated;
