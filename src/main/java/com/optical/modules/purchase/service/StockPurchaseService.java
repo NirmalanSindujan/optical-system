@@ -14,6 +14,7 @@ import com.optical.modules.product.repository.SupplierProductRepository;
 import com.optical.modules.purchase.dto.StockPurchaseCreateRequest;
 import com.optical.modules.purchase.dto.StockPurchaseItemRequest;
 import com.optical.modules.purchase.dto.StockPurchaseItemResponse;
+import com.optical.modules.purchase.dto.StockPurchasePageResponse;
 import com.optical.modules.purchase.dto.StockPurchaseResponse;
 import com.optical.modules.purchase.entity.PaymentMode;
 import com.optical.modules.purchase.entity.StockPurchase;
@@ -25,6 +26,8 @@ import com.optical.modules.supplier.entity.SupplierCreditLedger;
 import com.optical.modules.supplier.repository.SupplierCreditLedgerRepository;
 import com.optical.modules.supplier.repository.SupplierRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +37,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -93,9 +98,39 @@ public class StockPurchaseService {
 
     @Transactional(readOnly = true)
     public StockPurchaseResponse getById(Long id) {
-        StockPurchase purchase = stockPurchaseRepository.findById(id)
+        StockPurchase purchase = stockPurchaseRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Stock purchase not found"));
         return mapResponse(purchase);
+    }
+
+    @Transactional(readOnly = true)
+    public StockPurchasePageResponse search(String q, int page, int size) {
+        String keyword = normalize(q);
+        Page<Long> result = resolvePurchasePage(keyword, page, size);
+        List<StockPurchaseResponse> items = loadDetailedPurchases(result.getContent()).stream()
+                .map(this::mapResponse)
+                .toList();
+
+        return StockPurchasePageResponse.builder()
+                .items(items)
+                .totalCounts(result.getTotalElements())
+                .page(result.getNumber())
+                .size(result.getSize())
+                .totalPages(result.getTotalPages())
+                .build();
+    }
+
+    private Page<Long> resolvePurchasePage(String keyword, int page, int size) {
+        PageRequest pageable = PageRequest.of(page, size);
+        if (keyword == null) {
+            return stockPurchaseRepository.findActiveIds(pageable);
+        }
+
+        try {
+            return stockPurchaseRepository.findActiveIdsById(Long.parseLong(keyword), pageable);
+        } catch (NumberFormatException ignored) {
+            return Page.empty(pageable);
+        }
     }
 
     private List<StockPurchaseItem> buildItems(List<StockPurchaseItemRequest> requests, Long supplierId) {
@@ -231,6 +266,21 @@ public class StockPurchaseService {
         ledger.setReference(resolvePurchaseReference(purchase));
         ledger.setNotes(purchase.getNotes());
         supplierCreditLedgerRepository.save(ledger);
+    }
+
+    private List<StockPurchase> loadDetailedPurchases(List<Long> purchaseIds) {
+        if (purchaseIds.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, Integer> indexById = new HashMap<>();
+        for (int i = 0; i < purchaseIds.size(); i++) {
+            indexById.put(purchaseIds.get(i), i);
+        }
+
+        return stockPurchaseRepository.findDetailedByIdIn(purchaseIds).stream()
+                .sorted(Comparator.comparingInt(purchase -> indexById.getOrDefault(purchase.getId(), Integer.MAX_VALUE)))
+                .toList();
     }
 
     private StockPurchaseResponse mapResponse(StockPurchase purchase) {
