@@ -8,5 +8,7 @@ import java.util.Optional;
 public interface BranchRepository extends JpaRepository<Branch, Long> {
 
     Optional<Branch> findByCodeAndDeletedAtIsNull(String code);
+    Optional<Branch> findByIdAndDeletedAtIsNull(Long id);
+    Optional<Branch> findFirstByIsMainTrueAndDeletedAtIsNull();
 
 }

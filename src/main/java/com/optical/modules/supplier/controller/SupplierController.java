@@ -1,13 +1,20 @@
 package com.optical.modules.supplier.controller;
 
 import com.optical.modules.supplier.dto.SupplierPageResponse;
+import com.optical.modules.supplier.dto.SupplierCreditLedgerResponse;
+import com.optical.modules.supplier.dto.SupplierProductStockResponse;
+import com.optical.modules.supplier.dto.SupplierCreditSummaryResponse;
+import com.optical.modules.supplier.dto.SupplierPaymentRequest;
 import com.optical.modules.supplier.dto.SupplierRequest;
 import com.optical.modules.supplier.dto.SupplierResponse;
+import com.optical.modules.supplier.service.SupplierCreditService;
 import com.optical.modules.supplier.service.SupplierService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/suppliers")
@@ -15,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 public class SupplierController {
 
     private final SupplierService supplierService;
+    private final SupplierCreditService supplierCreditService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
@@ -34,6 +42,25 @@ public class SupplierController {
     @GetMapping("/{id}")
     public SupplierResponse getById(@PathVariable Long id) {
         return supplierService.getById(id);
+    }
+
+    @GetMapping("/{id}/products")
+    public List<SupplierProductStockResponse> getProducts(@PathVariable Long id) {
+        return supplierService.getProducts(id);
+    }
+
+    @GetMapping("/{id}/credits")
+    public SupplierCreditSummaryResponse getCreditSummary(@PathVariable Long id) {
+        return supplierCreditService.getSummary(id);
+    }
+
+    @PostMapping("/{id}/payments")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    public SupplierCreditLedgerResponse recordPayment(
+            @PathVariable Long id,
+            @Valid @RequestBody SupplierPaymentRequest request
+    ) {
+        return supplierCreditService.recordPayment(id, request);
     }
 
     @PutMapping("/{id}")

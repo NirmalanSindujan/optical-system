@@ -11,6 +11,8 @@ import java.util.List;
 
 public interface SupplierProductRepository extends JpaRepository<SupplierProduct, Long> {
 
+    boolean existsBySupplierIdAndProductIdAndDeletedAtIsNull(Long supplierId, Long productId);
+
     @Query("""
             select sp.supplierId from SupplierProduct sp
             where sp.product.id = :productId

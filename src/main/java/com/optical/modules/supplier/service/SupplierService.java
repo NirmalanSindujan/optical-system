@@ -2,7 +2,9 @@ package com.optical.modules.supplier.service;
 
 import com.optical.common.exception.DuplicateResourceException;
 import com.optical.common.exception.ResourceNotFoundException;
+import com.optical.modules.product.repository.ProductVariantRepository;
 import com.optical.modules.supplier.dto.SupplierPageResponse;
+import com.optical.modules.supplier.dto.SupplierProductStockResponse;
 import com.optical.modules.supplier.dto.SupplierRequest;
 import com.optical.modules.supplier.dto.SupplierResponse;
 import com.optical.modules.supplier.entity.Supplier;
@@ -11,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +25,7 @@ import static com.optical.common.util.StringNormalizer.normalize;
 public class SupplierService {
 
     private final SupplierRepository supplierRepository;
+    private final ProductVariantRepository productVariantRepository;
 
     public SupplierResponse create(SupplierRequest request) {
         String normalizedPhone = normalize(request.getPhone());
@@ -62,6 +66,13 @@ public class SupplierService {
         Supplier supplier = supplierRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Supplier not found"));
         return mapToResponse(supplier);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SupplierProductStockResponse> getProducts(Long id) {
+        supplierRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Supplier not found"));
+        return productVariantRepository.findStockBySupplierId(id);
     }
 
     public SupplierResponse update(Long id, SupplierRequest request) {
