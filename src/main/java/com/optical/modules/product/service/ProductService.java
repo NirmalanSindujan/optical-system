@@ -132,6 +132,20 @@ public class ProductService {
         return buildPageResponse(result, items);
     }
 
+
+    @Transactional(readOnly = true)
+    public ProductPageResponse searchLensesBySupplierID(String q, int page, int size, Long supplierId) {
+        Page<LensVariantDetails> result = lensVariantDetailsRepository.searchBySupplier(
+                supplierId,
+                normalize(q),
+                PageRequest.of(page, size)
+        );
+        List<ProductListResponse> items = result.getContent().stream()
+                .map(this::mapLensItem)
+                .toList();
+        return buildPageResponse(result, items);
+    }
+
     @Transactional(readOnly = true)
     public ProductPageResponse searchLensSubtab(String lensSubType, String q, int page, int size) {
         LensSubType normalizedLensSubType = parseLensSubType(lensSubType);

@@ -33,6 +33,34 @@ public interface LensVariantDetailsRepository extends JpaRepository<LensVariantD
             join l.variant v
             join v.product p
             where p.deletedAt is null
+              and exists (
+                   select 1
+                   from SupplierProduct sp
+                   where sp.product = p
+                     and sp.supplierId = :supplierId
+                     and sp.deletedAt is null
+              )
+              and v.deletedAt is null
+              and (
+                   :q is null or :q = ''
+                   or lower(coalesce(p.name, '')) like lower(concat('%', :q, '%'))
+                   or lower(coalesce(p.brandName, '')) like lower(concat('%', :q, '%'))
+                   or lower(coalesce(v.sku, '')) like lower(concat('%', :q, '%'))
+                   or lower(coalesce(v.barcode, '')) like lower(concat('%', :q, '%'))
+                   
+              )
+            """)
+    Page<LensVariantDetails> searchBySupplier(
+            @Param("supplierId") Long supplierId,
+            @Param("q") String q,
+            Pageable pageable
+    );
+
+    @Query("""
+            select l from LensVariantDetails l
+            join l.variant v
+            join v.product p
+            where p.deletedAt is null
               and v.deletedAt is null
               and l.lensSubType = :lensSubType
               and (
@@ -83,5 +111,4 @@ public interface LensVariantDetailsRepository extends JpaRepository<LensVariantD
             """)
     Optional<LensVariantDetails> findByProductId(@Param("productId") Long productId);
 }
-
 
