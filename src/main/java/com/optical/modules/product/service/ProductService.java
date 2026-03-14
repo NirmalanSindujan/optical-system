@@ -1,10 +1,12 @@
 package com.optical.modules.product.service;
 
+import com.optical.common.base.PageResponse;
 import com.optical.common.exception.DuplicateResourceException;
 import com.optical.common.exception.ResourceNotFoundException;
-import com.optical.modules.product.dto.LensSubType;
-import com.optical.modules.product.dto.LensSubtabResponse;
-import com.optical.modules.product.dto.LensDetailResponse;
+import com.optical.modules.product.dto.Lense.LensSubType;
+import com.optical.modules.product.dto.Lense.LensSubtabResponse;
+import com.optical.modules.product.dto.Lense.LensDetailResponse;
+import com.optical.modules.product.dto.Product.BillingProductListResponse;
 import com.optical.modules.product.dto.ProductCreateRequest;
 import com.optical.modules.product.dto.ProductCreateResponse;
 import com.optical.modules.product.dto.ProductListResponse;
@@ -17,13 +19,16 @@ import com.optical.modules.product.entity.ProductType;
 import com.optical.modules.product.entity.ProductVariant;
 import com.optical.modules.product.entity.Uom;
 import com.optical.modules.product.repository.AccessoryVariantDetailsRepository;
+import com.optical.modules.product.repository.FrameVariantDetailsRepository;
 import com.optical.modules.product.repository.LensVariantDetailsRepository;
 import com.optical.modules.product.repository.ProductRepository;
 import com.optical.modules.product.repository.ProductTypeRepository;
 import com.optical.modules.product.repository.ProductVariantRepository;
+import com.optical.modules.product.repository.SunglassesVariantDetailsRepository;
 import com.optical.modules.product.repository.UomRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -32,6 +37,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
@@ -47,6 +53,8 @@ public class ProductService {
     private final UomRepository uomRepository;
     private final LensVariantDetailsRepository lensVariantDetailsRepository;
     private final AccessoryVariantDetailsRepository accessoryVariantDetailsRepository;
+    private final FrameVariantDetailsRepository frameVariantDetailsRepository;
+    private final SunglassesVariantDetailsRepository sunglassesVariantDetailsRepository;
     private final ProductSupportService productSupportService;
 
     @Transactional
@@ -144,6 +152,35 @@ public class ProductService {
                 .map(this::mapLensItem)
                 .toList();
         return buildPageResponse(result, items);
+    }
+
+
+    @Transactional(readOnly = true)
+    public PageResponse<BillingProductListResponse> getBillingProductList(String q, int page, int size, Long supplierId, ProductVariantType type) {
+        String keyword = normalize(q);
+        List<ProductVariant> filtered = productVariantRepository.findAll().stream()
+                .filter(variant -> variant.getProduct() != null)
+                .filter(variant -> matchesSupplier(variant, supplierId))
+                .filter(variant -> matchesKeyword(variant, keyword))
+                .filter(variant -> matchesVariantType(variant, type))
+                .sorted(Comparator
+                        .comparing((ProductVariant variant) -> variant.getProduct().getName(), String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(ProductVariant::getId))
+                .toList();
+
+        Page<ProductVariant> result = toPage(filtered, PageRequest.of(page, size));
+
+        List<BillingProductListResponse> items = result.getContent().stream()
+                .map(this::mapBillingProductItem)
+                .toList();
+
+        return PageResponse.<BillingProductListResponse>builder()
+                .content(items)
+                .totalElements(result.getTotalElements())
+                .page(result.getNumber())
+                .size(result.getSize())
+                .totalPages(result.getTotalPages())
+                .build();
     }
 
     @Transactional(readOnly = true)
@@ -403,6 +440,88 @@ public class ProductService {
                 .quantity(variant.getQuantity())
                 .itemType(details.getItemType())
                 .build();
+    }
+
+    private BillingProductListResponse enrichBillingProductItem(BillingProductListResponse item) {
+        List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(item.getProductId());
+
+        return item.toBuilder()
+                .supplierIds(supplierIds)
+                .suppliers(productSupportService.resolveSupplierInfos(supplierIds))
+                .build();
+    }
+
+    private BillingProductListResponse mapBillingProductItem(ProductVariant variant) {
+        Product product = variant.getProduct();
+
+        return BillingProductListResponse.builder()
+                .productId(product.getId())
+                .variantId(variant.getId())
+                .productTypeCode(product.getProductType().getCode())
+                .name(product.getName())
+                .sku(variant.getSku())
+                .barcode(variant.getBarcode())
+                .uomCode(variant.getUom().getCode())
+                .variantType(resolveVariantType(variant))
+                .sellingPrice(variant.getSellingPrice())
+                .quantity(variant.getQuantity())
+                .build();
+    }
+
+    private ProductVariantType resolveVariantType(ProductVariant variant) {
+        if (lensVariantDetailsRepository.findByVariantId(variant.getId()).isPresent()) {
+            return ProductVariantType.LENS;
+        }
+        if (accessoryVariantDetailsRepository.findByProductId(variant.getProduct().getId()).isPresent()) {
+            return ProductVariantType.ACCESSORY;
+        }
+        if (frameVariantDetailsRepository.findByProductId(variant.getProduct().getId()).isPresent()) {
+            return ProductVariantType.FRAME;
+        }
+        if (sunglassesVariantDetailsRepository.findByProductId(variant.getProduct().getId()).isPresent()) {
+            return ProductVariantType.SUNGLASSES;
+        }
+        return null;
+    }
+
+    private boolean matchesSupplier(ProductVariant variant, Long supplierId) {
+        if (supplierId == null) {
+            return true;
+        }
+        return productSupportService.resolveSupplierIdsForProduct(variant.getProduct().getId()).contains(supplierId);
+    }
+
+    private boolean matchesKeyword(ProductVariant variant, String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            return true;
+        }
+        Product product = variant.getProduct();
+        String normalizedKeyword = keyword.toLowerCase();
+
+        return containsIgnoreCase(product.getName(), normalizedKeyword)
+                || containsIgnoreCase(product.getBrandName(), normalizedKeyword)
+                || containsIgnoreCase(variant.getSku(), normalizedKeyword)
+                || containsIgnoreCase(variant.getBarcode(), normalizedKeyword);
+    }
+
+    private boolean matchesVariantType(ProductVariant variant, ProductVariantType type) {
+        if (type == null) {
+            return true;
+        }
+        return type == resolveVariantType(variant);
+    }
+
+    private boolean containsIgnoreCase(String value, String keyword) {
+        return value != null && value.toLowerCase().contains(keyword);
+    }
+
+    private Page<ProductVariant> toPage(List<ProductVariant> items, PageRequest pageable) {
+        int start = (int) pageable.getOffset();
+        if (start >= items.size()) {
+            return new PageImpl<>(List.of(), pageable, items.size());
+        }
+        int end = Math.min(start + pageable.getPageSize(), items.size());
+        return new PageImpl<>(items.subList(start, end), pageable, items.size());
     }
 
     private void validateCommercialFields(ProductCreateRequest request) {

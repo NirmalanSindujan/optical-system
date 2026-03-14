@@ -1,20 +1,19 @@
 package com.optical.modules.product.controller;
 
-import com.optical.modules.product.dto.LensSubType;
-import com.optical.modules.product.dto.LensDetailResponse;
-import com.optical.modules.product.dto.LensSubtabResponse;
+import com.optical.common.base.PageResponse;
+import com.optical.modules.product.dto.Lense.LensSubType;
+import com.optical.modules.product.dto.Lense.LensDetailResponse;
+import com.optical.modules.product.dto.Lense.LensSubtabResponse;
+import com.optical.modules.product.dto.Product.BillingProductListResponse;
 import com.optical.modules.product.dto.ProductCreateRequest;
 import com.optical.modules.product.dto.ProductCreateResponse;
 import com.optical.modules.product.dto.ProductPageResponse;
+import com.optical.modules.product.dto.ProductVariantType;
 import com.optical.modules.product.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
-import io.swagger.v3.oas.annotations.media.ArraySchema;
-import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -42,27 +41,11 @@ public class ProductController {
     private final ProductService productService;
 
     @PostMapping
-    @Operation(
-            summary = "Create generic product",
-            description = "Creates generic catalog products. Use dedicated frame and sunglasses controllers for those workflows."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Created successfully", content = @Content(schema = @Schema(implementation = ProductCreateResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Validation error"),
-            @ApiResponse(responseCode = "401", description = "Unauthorized"),
-            @ApiResponse(responseCode = "403", description = "Forbidden"),
-            @ApiResponse(responseCode = "409", description = "Duplicate SKU/Barcode")
-    })
     public ProductCreateResponse create(@Valid @RequestBody ProductCreateRequest request) {
         return productService.create(request);
     }
 
     @DeleteMapping("/{productId}")
-    @Operation(summary = "Delete product", description = "Soft deletes a product and its variants for any product type.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Deleted successfully"),
-            @ApiResponse(responseCode = "404", description = "Product not found")
-    })
     public void deleteProduct(@PathVariable Long productId) {
         productService.deleteProduct(productId);
     }
@@ -78,31 +61,16 @@ public class ProductController {
     }
 
     @GetMapping("/lenses/{variantId}")
-    @Operation(summary = "Get lens by variant id", description = "Returns detailed lens data by variant id.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Found", content = @Content(schema = @Schema(implementation = LensDetailResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Lens not found")
-    })
     public LensDetailResponse getLensByVariantId(@PathVariable Long variantId) {
         return productService.getLensByVariantId(variantId);
     }
 
     @GetMapping("/lenses/subtabs")
-    @Operation(
-            summary = "Get lens subtabs",
-            description = "Returns 4 lens subtype tabs with counts: SINGLE_VISION, BIFOCAL, PROGRESSIVE, CONTACT_LENS."
-    )
-    @ApiResponse(
-            responseCode = "200",
-            description = "Lens subtabs",
-            content = @Content(array = @ArraySchema(schema = @Schema(implementation = LensSubtabResponse.class)))
-    )
     public List<LensSubtabResponse> getLensSubtabs() {
         return productService.getLensSubtabs();
     }
 
     @GetMapping("/lenses/subtabs/{lensSubType}")
-    @Operation(summary = "List lenses by subtab", description = "Paginated list for one lens subtab.")
     public ProductPageResponse getLensSubtabProducts(
             @Parameter(
                     in = ParameterIn.PATH,
@@ -115,6 +83,17 @@ public class ProductController {
             @RequestParam(required = false) String q
     ) {
         return productService.searchLensSubtab(lensSubType, q, page, size);
+    }
+
+    @GetMapping("/productList")
+    public PageResponse<BillingProductListResponse> getBillingProductList(
+            @RequestParam(required = false) Long supplierId,
+            @RequestParam(required = false) ProductVariantType type,
+            @RequestParam(defaultValue = "") String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ){
+      return productService.getBillingProductList(q,page,size,supplierId,type);
     }
 
 

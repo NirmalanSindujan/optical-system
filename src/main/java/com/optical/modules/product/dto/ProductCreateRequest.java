@@ -1,5 +1,6 @@
 package com.optical.modules.product.dto;
 
+import com.optical.modules.product.dto.Lense.LensDetailsRequest;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;

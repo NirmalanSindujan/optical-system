@@ -1,6 +1,6 @@
 package com.optical.modules.product.controller;
 
-import com.optical.modules.product.dto.LensSubType;
+import com.optical.modules.product.dto.Lense.LensSubType;
 import com.optical.modules.product.dto.ProductPageResponse;
 import com.optical.modules.product.dto.ProgressiveCreateRequest;
 import com.optical.modules.product.dto.ProgressiveCreateResponse;

@@ -1,5 +1,6 @@
 package com.optical.modules.product.dto;
 
+import com.optical.modules.product.dto.Lense.LensSubType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;

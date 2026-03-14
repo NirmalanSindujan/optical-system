@@ -1,4 +1,4 @@
-package com.optical.modules.product.dto;
+package com.optical.modules.product.dto.Lense;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;

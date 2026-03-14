@@ -1,8 +1,8 @@
 package com.optical.modules.product.service;
 
 import com.optical.common.exception.ResourceNotFoundException;
-import com.optical.modules.product.dto.LensAdditionMethod;
-import com.optical.modules.product.dto.LensSubType;
+import com.optical.modules.product.dto.Lense.LensAdditionMethod;
+import com.optical.modules.product.dto.Lense.LensSubType;
 import com.optical.modules.product.dto.ProgressiveCreateRequest;
 import com.optical.modules.product.dto.ProgressiveCreateResponse;
 import com.optical.modules.product.dto.ProgressiveDetailResponse;

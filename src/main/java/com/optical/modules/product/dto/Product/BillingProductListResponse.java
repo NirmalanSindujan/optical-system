@@ -2,30 +2,53 @@ package com.optical.modules.product.dto.Product;
 
 import com.optical.modules.product.dto.ProductVariantType;
 import com.optical.modules.product.dto.SupplierInfoResponse;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.util.List;
 
-public class ProductListResonse {
+@Getter
+@Builder(toBuilder = true)
+@AllArgsConstructor
+public class BillingProductListResponse {
 
     private Long productId;
     private Long variantId;
     private String productTypeCode;
-    private String brandName;
     private String name;
-    private String description;
-    private Boolean productActive;
-    private Boolean variantActive;
     private String sku;
     private String barcode;
     private String uomCode;
-    private String notes;
     private ProductVariantType variantType;
-    private Long supplierId;
-    private List<Long> supplierIds;
-    private List<SupplierInfoResponse> suppliers;
-    private BigDecimal purchasePrice;
     private BigDecimal sellingPrice;
     private BigDecimal quantity;
+    private List<Long> supplierIds;
+    private List<SupplierInfoResponse> suppliers;
+
+    public BillingProductListResponse(
+            Long productId,
+            Long variantId,
+            String productTypeCode,
+            String name,
+            String sku,
+            String barcode,
+            String uomCode,
+            String variantType,
+            BigDecimal sellingPrice,
+            BigDecimal quantity
+    ) {
+        this.productId = productId;
+        this.variantId = variantId;
+        this.productTypeCode = productTypeCode;
+        this.name = name;
+        this.sku = sku;
+        this.barcode = barcode;
+        this.uomCode = uomCode;
+        this.variantType = variantType == null ? null : ProductVariantType.valueOf(variantType);
+        this.sellingPrice = sellingPrice;
+        this.quantity = quantity;
+    }
 
 }

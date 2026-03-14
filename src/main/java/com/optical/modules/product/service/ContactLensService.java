@@ -7,7 +7,7 @@ import com.optical.modules.product.dto.ContactLensDetailResponse;
 import com.optical.modules.product.dto.ContactLensListResponse;
 import com.optical.modules.product.dto.ContactLensPageResponse;
 import com.optical.modules.product.dto.ContactLensUpdateRequest;
-import com.optical.modules.product.dto.LensSubType;
+import com.optical.modules.product.dto.Lense.LensSubType;
 import com.optical.modules.product.entity.LensVariantDetails;
 import com.optical.modules.product.entity.Product;
 import com.optical.modules.product.entity.ProductType;

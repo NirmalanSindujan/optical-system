@@ -1,7 +1,7 @@
 package com.optical.modules.product.repository;
 
-import com.optical.modules.supplier.dto.SupplierProductStockResponse;
 import com.optical.modules.product.entity.ProductVariant;
+import com.optical.modules.supplier.dto.SupplierProductStockResponse;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -36,5 +36,3 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
             """)
     List<SupplierProductStockResponse> findStockBySupplierId(@Param("supplierId") Long supplierId);
 }
-
-
