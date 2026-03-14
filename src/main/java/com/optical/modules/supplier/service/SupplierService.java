@@ -8,17 +8,25 @@ import com.optical.modules.supplier.dto.SupplierProductStockResponse;
 import com.optical.modules.supplier.dto.SupplierRequest;
 import com.optical.modules.supplier.dto.SupplierResponse;
 import com.optical.modules.supplier.entity.Supplier;
+import com.optical.modules.supplier.entity.SupplierCreditEntryType;
+import com.optical.modules.supplier.entity.SupplierCreditLedger;
+import com.optical.modules.supplier.repository.SupplierCreditLedgerRepository;
 import com.optical.modules.supplier.repository.SupplierRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static com.optical.common.util.StringNormalizer.normalize;
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
 
 @Service
 @RequiredArgsConstructor
@@ -26,7 +34,9 @@ public class SupplierService {
 
     private final SupplierRepository supplierRepository;
     private final ProductVariantRepository productVariantRepository;
+    private final SupplierCreditLedgerRepository supplierCreditLedgerRepository;
 
+    @Transactional
     public SupplierResponse create(SupplierRequest request) {
         String normalizedPhone = normalize(request.getPhone());
         String normalizedEmail = normalize(request.getEmail());
@@ -42,7 +52,10 @@ public class SupplierService {
 
         Supplier supplier = new Supplier();
         applyRequest(supplier, request);
+        BigDecimal openingPendingAmount = scaleOrZero(request.getPendingAmount());
+        supplier.setPendingAmount(openingPendingAmount);
         Supplier saved = supplierRepository.save(supplier);
+        recordOpeningBalanceIfRequired(saved, request, openingPendingAmount);
         return mapToResponse(saved);
     }
 
@@ -109,6 +122,35 @@ public class SupplierService {
         supplier.setEmail(normalize(request.getEmail()));
         supplier.setAddress(normalize(request.getAddress()));
         supplier.setNotes(normalize(request.getNotes()));
+    }
+
+    private void recordOpeningBalanceIfRequired(Supplier supplier, SupplierRequest request, BigDecimal openingPendingAmount) {
+        if (openingPendingAmount.compareTo(BigDecimal.ZERO) == 0) {
+            return;
+        }
+
+        LocalDate entryDate = request.getOpeningBalanceDate() == null ? LocalDate.now() : request.getOpeningBalanceDate();
+        if (entryDate.isAfter(LocalDate.now())) {
+            throw new ResponseStatusException(BAD_REQUEST, "openingBalanceDate cannot be in the future");
+        }
+
+        SupplierCreditLedger ledger = new SupplierCreditLedger();
+        ledger.setSupplier(supplier);
+        ledger.setEntryDate(entryDate);
+        ledger.setAmount(openingPendingAmount);
+        ledger.setEntryType(SupplierCreditEntryType.ADJUSTMENT);
+        ledger.setReference(normalize(request.getOpeningBalanceReference()) == null
+                ? "OPENING_BALANCE"
+                : normalize(request.getOpeningBalanceReference()));
+        ledger.setNotes(normalize(request.getOpeningBalanceNotes()));
+        supplierCreditLedgerRepository.save(ledger);
+    }
+
+    private BigDecimal scaleOrZero(BigDecimal value) {
+        if (value == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        return value.setScale(2, RoundingMode.HALF_UP);
     }
 
     private SupplierResponse mapToResponse(Supplier supplier) {

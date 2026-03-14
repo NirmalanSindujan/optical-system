@@ -7,6 +7,7 @@ import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Getter
 @Builder
@@ -20,4 +21,5 @@ public class SupplierCreditLedgerResponse {
     private String reference;
     private String notes;
     private Long stockPurchaseId;
+    private List<SupplierPaymentAllocationResponse> allocations;
 }

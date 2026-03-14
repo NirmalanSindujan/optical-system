@@ -10,12 +10,15 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "supplier_credit_ledger")
@@ -50,4 +53,7 @@ public class SupplierCreditLedger extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String notes;
+
+    @OneToMany(mappedBy = "supplierCreditLedger")
+    private List<SupplierPaymentAllocation> allocations = new ArrayList<>();
 }
