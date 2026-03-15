@@ -44,6 +44,18 @@ public interface StockPurchaseRepository extends JpaRepository<StockPurchase, Lo
     )
     Page<Long> findActiveIdsById(@Param("id") Long id, Pageable pageable);
 
+
+    @EntityGraph(attributePaths = {"supplier"})
+    @Query("""
+            select sp
+            from StockPurchase sp
+            where sp.deletedAt is null
+              and sp.supplier.id = :id
+              and sp.balanceAmount > 0
+            order by sp.purchaseDate desc, sp.id desc
+            """)
+    List<StockPurchase> findPendingBillsBySupplierId(@Param("id") Long id);
+
     @EntityGraph(attributePaths = {"supplier", "branch", "items", "items.variant", "items.variant.product"})
     @Query("select distinct sp from StockPurchase sp where sp.id in :ids")
     List<StockPurchase> findDetailedByIdIn(@Param("ids") List<Long> ids);

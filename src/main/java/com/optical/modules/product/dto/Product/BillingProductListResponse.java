@@ -1,5 +1,6 @@
 package com.optical.modules.product.dto.Product;
 
+import com.optical.modules.product.dto.Lense.LensSubType;
 import com.optical.modules.product.dto.ProductVariantType;
 import com.optical.modules.product.dto.SupplierInfoResponse;
 import lombok.AllArgsConstructor;
@@ -26,6 +27,7 @@ public class BillingProductListResponse {
     private BigDecimal quantity;
     private List<Long> supplierIds;
     private List<SupplierInfoResponse> suppliers;
+    private LensSubType lensSubType;
 
     public BillingProductListResponse(
             Long productId,
@@ -37,7 +39,8 @@ public class BillingProductListResponse {
             String uomCode,
             String variantType,
             BigDecimal sellingPrice,
-            BigDecimal quantity
+            BigDecimal quantity,
+            LensSubType lensSubType
     ) {
         this.productId = productId;
         this.variantId = variantId;
@@ -49,6 +52,7 @@ public class BillingProductListResponse {
         this.variantType = variantType == null ? null : ProductVariantType.valueOf(variantType);
         this.sellingPrice = sellingPrice;
         this.quantity = quantity;
+        this.lensSubType = lensSubType;
     }
 
 }

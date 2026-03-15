@@ -452,12 +452,24 @@ public class ProductService {
     }
 
     private BillingProductListResponse mapBillingProductItem(ProductVariant variant) {
+
         Product product = variant.getProduct();
+
+        LensSubType lensSubType = null;
+
+        if (variant.getLensDetails() != null &&
+                variant.getLensDetails().getLensSubType() != null) {
+
+            lensSubType = LensSubType.valueOf(
+                    variant.getLensDetails().getLensSubType()
+            );
+        }
 
         return BillingProductListResponse.builder()
                 .productId(product.getId())
                 .variantId(variant.getId())
                 .productTypeCode(product.getProductType().getCode())
+                .lensSubType(lensSubType)
                 .name(product.getName())
                 .sku(variant.getSku())
                 .barcode(variant.getBarcode())

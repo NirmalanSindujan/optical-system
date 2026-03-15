@@ -1,14 +1,16 @@
 package com.optical.modules.supplier.controller;
 
-import com.optical.modules.supplier.dto.SupplierPageResponse;
 import com.optical.modules.supplier.dto.SupplierCreditLedgerResponse;
-import com.optical.modules.supplier.dto.SupplierProductStockResponse;
 import com.optical.modules.supplier.dto.SupplierCreditSummaryResponse;
+import com.optical.modules.supplier.dto.SupplierPageResponse;
 import com.optical.modules.supplier.dto.SupplierPaymentRequest;
+import com.optical.modules.supplier.dto.SupplierProductStockResponse;
 import com.optical.modules.supplier.dto.SupplierRequest;
 import com.optical.modules.supplier.dto.SupplierResponse;
+import com.optical.modules.supplier.dto.SuplierPendingBillsResponse;
 import com.optical.modules.supplier.service.SupplierCreditService;
 import com.optical.modules.supplier.service.SupplierService;
+import com.optical.modules.purchase.service.StockPurchaseService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,6 +25,7 @@ public class SupplierController {
 
     private final SupplierService supplierService;
     private final SupplierCreditService supplierCreditService;
+    private final StockPurchaseService stockPurchaseService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
@@ -71,5 +74,12 @@ public class SupplierController {
     @DeleteMapping("/{id}")
     public void delete(@PathVariable Long id) {
         supplierService.delete(id);
+    }
+
+
+    @GetMapping("/{id}/pending-bills")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    public SuplierPendingBillsResponse getPendingBills(@PathVariable Long id) {
+        return stockPurchaseService.getPendingBillsBySupplier(id);
     }
 }

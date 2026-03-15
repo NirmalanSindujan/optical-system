@@ -11,11 +11,7 @@ import com.optical.modules.product.repository.BranchInventoryRepository;
 import com.optical.modules.product.repository.InventoryLotRepository;
 import com.optical.modules.product.repository.ProductVariantRepository;
 import com.optical.modules.product.repository.SupplierProductRepository;
-import com.optical.modules.purchase.dto.StockPurchaseCreateRequest;
-import com.optical.modules.purchase.dto.StockPurchaseItemRequest;
-import com.optical.modules.purchase.dto.StockPurchaseItemResponse;
-import com.optical.modules.purchase.dto.StockPurchasePageResponse;
-import com.optical.modules.purchase.dto.StockPurchaseResponse;
+import com.optical.modules.purchase.dto.*;
 import com.optical.modules.purchase.entity.PaymentMode;
 import com.optical.modules.purchase.entity.StockPurchase;
 import com.optical.modules.purchase.entity.StockPurchaseItem;
@@ -23,6 +19,7 @@ import com.optical.modules.purchase.repository.StockPurchaseRepository;
 import com.optical.modules.supplier.entity.Supplier;
 import com.optical.modules.supplier.entity.SupplierCreditEntryType;
 import com.optical.modules.supplier.entity.SupplierCreditLedger;
+import com.optical.modules.supplier.dto.SuplierPendingBillsResponse;
 import com.optical.modules.supplier.repository.SupplierCreditLedgerRepository;
 import com.optical.modules.supplier.repository.SupplierRepository;
 import lombok.RequiredArgsConstructor;
@@ -117,6 +114,23 @@ public class StockPurchaseService {
                 .page(result.getNumber())
                 .size(result.getSize())
                 .totalPages(result.getTotalPages())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public SuplierPendingBillsResponse getPendingBillsBySupplier(Long supplierId) {
+        Supplier supplier = supplierRepository.findByIdAndDeletedAtIsNull(supplierId)
+                .orElseThrow(() -> new ResourceNotFoundException("Supplier not found"));
+
+        List<StockPurchasePendingBill> supplierBills = stockPurchaseRepository.findPendingBillsBySupplierId(supplierId).stream()
+                .map(this::mapPendingBill)
+                .toList();
+
+        return SuplierPendingBillsResponse.builder()
+                .supplierId(supplier.getId())
+                .supplierName(supplier.getName())
+                .totalPendingAmount(scale(zeroIfNull(supplier.getPendingAmount())))
+                .supplierBills(supplierBills)
                 .build();
     }
 
@@ -351,5 +365,18 @@ public class StockPurchaseService {
 
     private BigDecimal scale(BigDecimal value) {
         return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private StockPurchasePendingBill mapPendingBill(StockPurchase purchase) {
+        return StockPurchasePendingBill.builder()
+                .purchaseId(purchase.getId())
+                .billNumber(purchase.getBillNumber() == null ? "PURCHASE-" + purchase.getId() : purchase.getBillNumber())
+                .purchaseDate(purchase.getPurchaseDate())
+                .totalAmount(purchase.getTotalAmount())
+                .paidAmount(purchase.getPaidAmount())
+                .pendingAmount(purchase.getBalanceAmount())
+                .currencyCode(purchase.getCurrencyCode())
+                .notes(purchase.getNotes())
+                .build();
     }
 }

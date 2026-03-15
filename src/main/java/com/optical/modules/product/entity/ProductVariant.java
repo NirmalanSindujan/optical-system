@@ -1,14 +1,7 @@
 package com.optical.modules.product.entity;
 
 import com.optical.common.base.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.*;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
@@ -67,6 +60,9 @@ public class ProductVariant extends BaseEntity {
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
+
+    @OneToOne(mappedBy = "variant", fetch = FetchType.LAZY)
+    private LensVariantDetails lensDetails;
 
     @EqualsAndHashCode.Include
     private Long entityId() {
