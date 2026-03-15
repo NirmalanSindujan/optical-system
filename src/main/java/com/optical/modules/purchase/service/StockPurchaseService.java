@@ -122,8 +122,7 @@ public class StockPurchaseService {
         Supplier supplier = supplierRepository.findByIdAndDeletedAtIsNull(supplierId)
                 .orElseThrow(() -> new ResourceNotFoundException("Supplier not found"));
 
-        List<StockPurchasePendingBill> supplierBills = stockPurchaseRepository.findPendingBillsBySupplierId(supplierId)
-                .stream()
+        List<StockPurchasePendingBill> supplierBills = stockPurchaseRepository.findPendingBillsBySupplierId(supplierId).stream()
                 .map(this::mapPendingBill)
                 .toList();
 
@@ -156,10 +155,12 @@ public class StockPurchaseService {
             ProductVariant variant = variantsById.get(request.getVariantId());
             if (!supplierProductRepository.existsBySupplierIdAndProductIdAndDeletedAtIsNull(
                     supplierId,
-                    variant.getProduct().getId())) {
+                    variant.getProduct().getId()
+            )) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        "Supplier is not linked to product for variant: " + request.getVariantId());
+                        "Supplier is not linked to product for variant: " + request.getVariantId()
+                );
             }
 
             StockPurchaseItem item = new StockPurchaseItem();
@@ -218,7 +219,8 @@ public class StockPurchaseService {
         if (paymentMode != PaymentMode.CREDIT && paidAmount.compareTo(totalAmount) != 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Use CREDIT payment mode for purchases with an outstanding balance");
+                    "Use CREDIT payment mode for purchases with an outstanding balance"
+            );
         }
 
         return paidAmount;
@@ -291,8 +293,7 @@ public class StockPurchaseService {
         }
 
         return stockPurchaseRepository.findDetailedByIdIn(purchaseIds).stream()
-                .sorted(Comparator
-                        .comparingInt(purchase -> indexById.getOrDefault(purchase.getId(), Integer.MAX_VALUE)))
+                .sorted(Comparator.comparingInt(purchase -> indexById.getOrDefault(purchase.getId(), Integer.MAX_VALUE)))
                 .toList();
     }
 
@@ -369,8 +370,7 @@ public class StockPurchaseService {
     private StockPurchasePendingBill mapPendingBill(StockPurchase purchase) {
         return StockPurchasePendingBill.builder()
                 .purchaseId(purchase.getId())
-                .billNumber(
-                        purchase.getBillNumber() == null ? "PURCHASE-" + purchase.getId() : purchase.getBillNumber())
+                .billNumber(purchase.getBillNumber() == null ? "PURCHASE-" + purchase.getId() : purchase.getBillNumber())
                 .purchaseDate(purchase.getPurchaseDate())
                 .totalAmount(purchase.getTotalAmount())
                 .paidAmount(purchase.getPaidAmount())
