@@ -1,10 +1,13 @@
 .git
+.gitattributes
 .gitignore
 .idea
+.vscode
 .env
 .env.*
 !.env.example
-.mvn/wrapper/maven-wrapper.jar
-.vscode
 target
+deploy
 HELP.md
+README*
+docker-compose*.yml
