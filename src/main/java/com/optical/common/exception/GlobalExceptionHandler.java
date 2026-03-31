@@ -50,6 +50,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException ex) {
+        System.err.println("Unhandled runtime exception: " + ex.getClass().getName() + " - " + ex.getMessage());
+        ex.printStackTrace();
         if (ex.getMessage() != null && ex.getMessage().toLowerCase().contains("already exists")) {
             return build(HttpStatus.CONFLICT, ex.getMessage());
         }

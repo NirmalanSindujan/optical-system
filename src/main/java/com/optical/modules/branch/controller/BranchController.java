@@ -27,4 +27,21 @@ public class BranchController {
     public List<BranchResponse> getAll() {
         return branchService.getAll();
     }
+
+    @GetMapping("/{id}")
+    public BranchResponse getById(@PathVariable Long id) {
+        return branchService.getById(id);
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public BranchResponse update(@PathVariable Long id, @Valid @RequestBody BranchRequest request) {
+        return branchService.update(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public void delete(@PathVariable Long id) {
+        branchService.delete(id);
+    }
 }
