@@ -13,12 +13,14 @@ import com.optical.modules.product.dto.ProductListResponse;
 import com.optical.modules.product.dto.ProductPageResponse;
 import com.optical.modules.product.dto.ProductVariantType;
 import com.optical.modules.product.entity.AccessoryVariantDetails;
+import com.optical.modules.product.entity.BranchInventory;
 import com.optical.modules.product.entity.LensVariantDetails;
 import com.optical.modules.product.entity.Product;
 import com.optical.modules.product.entity.ProductType;
 import com.optical.modules.product.entity.ProductVariant;
 import com.optical.modules.product.entity.Uom;
 import com.optical.modules.product.repository.AccessoryVariantDetailsRepository;
+import com.optical.modules.product.repository.BranchInventoryRepository;
 import com.optical.modules.product.repository.FrameVariantDetailsRepository;
 import com.optical.modules.product.repository.LensVariantDetailsRepository;
 import com.optical.modules.product.repository.ProductRepository;
@@ -53,6 +55,7 @@ public class ProductService {
     private final UomRepository uomRepository;
     private final LensVariantDetailsRepository lensVariantDetailsRepository;
     private final AccessoryVariantDetailsRepository accessoryVariantDetailsRepository;
+    private final BranchInventoryRepository branchInventoryRepository;
     private final FrameVariantDetailsRepository frameVariantDetailsRepository;
     private final SunglassesVariantDetailsRepository sunglassesVariantDetailsRepository;
     private final ProductSupportService productSupportService;
@@ -156,7 +159,14 @@ public class ProductService {
 
 
     @Transactional(readOnly = true)
-    public PageResponse<BillingProductListResponse> getBillingProductList(String q, int page, int size, Long supplierId, ProductVariantType type) {
+    public PageResponse<BillingProductListResponse> getBillingProductList(
+            String q,
+            int page,
+            int size,
+            Long supplierId,
+            ProductVariantType type,
+            Long branchId
+    ) {
         String keyword = normalize(q);
         List<ProductVariant> filtered = productVariantRepository.findAll().stream()
                 .filter(variant -> variant.getProduct() != null)
@@ -171,7 +181,7 @@ public class ProductService {
         Page<ProductVariant> result = toPage(filtered, PageRequest.of(page, size));
 
         List<BillingProductListResponse> items = result.getContent().stream()
-                .map(this::mapBillingProductItem)
+                .map(variant -> mapBillingProductItem(variant, branchId))
                 .toList();
 
         return PageResponse.<BillingProductListResponse>builder()
@@ -451,7 +461,7 @@ public class ProductService {
                 .build();
     }
 
-    private BillingProductListResponse mapBillingProductItem(ProductVariant variant) {
+    private BillingProductListResponse mapBillingProductItem(ProductVariant variant, Long branchId) {
 
         Product product = variant.getProduct();
 
@@ -465,6 +475,13 @@ public class ProductService {
             );
         }
 
+        BigDecimal quantity = variant.getQuantity();
+        if (branchId != null) {
+            quantity = branchInventoryRepository.findByBranch_IdAndVariant_Id(branchId, variant.getId())
+                    .map(this::resolveAvailableQuantity)
+                    .orElse(BigDecimal.ZERO);
+        }
+
         return BillingProductListResponse.builder()
                 .productId(product.getId())
                 .variantId(variant.getId())
@@ -476,8 +493,12 @@ public class ProductService {
                 .uomCode(variant.getUom().getCode())
                 .variantType(resolveVariantType(variant))
                 .sellingPrice(variant.getSellingPrice())
-                .quantity(variant.getQuantity())
+                .quantity(quantity)
                 .build();
+    }
+
+    private BigDecimal resolveAvailableQuantity(BranchInventory inventory) {
+        return zeroIfNull(inventory.getOnHand()).subtract(zeroIfNull(inventory.getReserved()));
     }
 
     private ProductVariantType resolveVariantType(ProductVariant variant) {
@@ -593,5 +614,9 @@ public class ProductService {
     private Long firstSupplierId(Long productId) {
         List<Long> supplierIds = productSupportService.resolveSupplierIdsForProduct(productId);
         return supplierIds.isEmpty() ? null : supplierIds.get(0);
+    }
+
+    private BigDecimal zeroIfNull(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 }

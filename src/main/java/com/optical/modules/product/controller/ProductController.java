@@ -88,12 +88,13 @@ public class ProductController {
     @GetMapping("/productList")
     public PageResponse<BillingProductListResponse> getBillingProductList(
             @RequestParam(required = false) Long supplierId,
+            @RequestParam(required = false) Long branchId,
             @RequestParam(required = false) ProductVariantType type,
             @RequestParam(defaultValue = "") String q,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ){
-      return productService.getBillingProductList(q,page,size,supplierId,type);
+      return productService.getBillingProductList(q,page,size,supplierId,type,branchId);
     }
 
 
