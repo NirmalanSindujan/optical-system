@@ -14,6 +14,8 @@ public class CustomerBillResponse {
     private Long customerId;
     private String customerName;
     private BigDecimal customerPendingAmount;
+    private Long patientId;
+    private String patientName;
     private Long branchId;
     private String branchName;
     private String billNumber;
@@ -27,4 +29,5 @@ public class CustomerBillResponse {
     private String notes;
     private List<CustomerBillItemResponse> items;
     private List<CustomerBillPaymentResponse> payments;
+    private com.optical.modules.prescription.dto.PrescriptionResponse prescription;
 }

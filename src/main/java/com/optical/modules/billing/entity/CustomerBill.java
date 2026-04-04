@@ -3,6 +3,8 @@ package com.optical.modules.billing.entity;
 import com.optical.common.base.BaseEntity;
 import com.optical.modules.branch.entity.Branch;
 import com.optical.modules.customer.entity.Customer;
+import com.optical.modules.patient.entity.Patient;
+import com.optical.modules.prescription.entity.Prescription;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -28,6 +30,10 @@ public class CustomerBill extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id")
     private Customer customer;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "patient_id")
+    private Patient patient;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "branch_id", nullable = false)
@@ -65,4 +71,7 @@ public class CustomerBill extends BaseEntity {
 
     @OneToMany(mappedBy = "customerBill", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CustomerBillPayment> payments = new ArrayList<>();
+
+    @jakarta.persistence.OneToOne(mappedBy = "customerBill", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Prescription prescription;
 }

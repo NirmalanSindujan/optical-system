@@ -15,7 +15,7 @@ import java.util.Optional;
 
 public interface CustomerBillRepository extends JpaRepository<CustomerBill, Long> {
 
-    @EntityGraph(attributePaths = {"customer", "branch"})
+    @EntityGraph(attributePaths = {"customer", "patient", "branch", "prescription"})
     Optional<CustomerBill> findByIdAndDeletedAtIsNull(Long id);
 
     @Query("""
@@ -31,18 +31,20 @@ public interface CustomerBillRepository extends JpaRepository<CustomerBill, Long
             select b.id
             from CustomerBill b
             left join b.customer c
+            left join b.patient p
             where b.deletedAt is null
               and (:branchId is null or b.branch.id = :branchId)
               and (
                     :keyword is null
                     or lower(cast(coalesce(b.billNumber, '') as string)) like lower(concat('%', :keyword, '%'))
                     or lower(cast(coalesce(c.name, '') as string)) like lower(concat('%', :keyword, '%'))
+                    or lower(cast(coalesce(p.name, '') as string)) like lower(concat('%', :keyword, '%'))
                   )
             order by b.billDate desc, b.id desc
             """)
     Page<Long> findActiveIds(@Param("keyword") String keyword, @Param("branchId") Long branchId, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"customer", "branch"})
+    @EntityGraph(attributePaths = {"customer", "patient", "branch", "prescription"})
     List<CustomerBill> findByIdIn(List<Long> ids);
 
     @Query("""

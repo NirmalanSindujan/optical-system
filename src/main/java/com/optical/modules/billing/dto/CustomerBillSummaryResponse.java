@@ -12,6 +12,8 @@ public class CustomerBillSummaryResponse {
     private Long id;
     private Long customerId;
     private String customerName;
+    private Long patientId;
+    private String patientName;
     private Long branchId;
     private String branchName;
     private String billNumber;
@@ -22,4 +24,5 @@ public class CustomerBillSummaryResponse {
     private BigDecimal paidAmount;
     private BigDecimal balanceAmount;
     private String currencyCode;
+    private Long prescriptionId;
 }

@@ -13,7 +13,10 @@ import java.util.List;
 @Setter
 public class CustomerBillCreateRequest {
 
+    @NotNull
     private Long customerId;
+
+    private Long patientId;
 
     @NotNull
     private Long branchId;
@@ -36,4 +39,7 @@ public class CustomerBillCreateRequest {
     @Valid
     @NotEmpty
     private List<CustomerBillPaymentRequest> payments;
+
+    @Valid
+    private com.optical.modules.prescription.dto.PrescriptionRequest prescription;
 }

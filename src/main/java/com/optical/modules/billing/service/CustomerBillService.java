@@ -22,12 +22,17 @@ import com.optical.modules.customer.entity.Customer;
 import com.optical.modules.customer.entity.CustomerCreditLedger;
 import com.optical.modules.customer.repository.CustomerCreditLedgerRepository;
 import com.optical.modules.customer.repository.CustomerRepository;
+import com.optical.modules.patient.entity.Patient;
+import com.optical.modules.patient.repository.PatientRepository;
 import com.optical.modules.product.entity.BranchInventory;
 import com.optical.modules.product.entity.InventoryLot;
 import com.optical.modules.product.entity.ProductVariant;
 import com.optical.modules.product.repository.BranchInventoryRepository;
 import com.optical.modules.product.repository.InventoryLotRepository;
 import com.optical.modules.product.repository.ProductVariantRepository;
+import com.optical.modules.prescription.dto.PrescriptionRequest;
+import com.optical.modules.prescription.entity.Prescription;
+import com.optical.modules.prescription.service.PrescriptionService;
 import com.optical.modules.purchase.entity.PaymentMode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -58,15 +63,18 @@ public class CustomerBillService {
     private final CustomerRepository customerRepository;
     private final CustomerCreditLedgerRepository customerCreditLedgerRepository;
     private final BranchRepository branchRepository;
+    private final PatientRepository patientRepository;
     private final ProductVariantRepository productVariantRepository;
     private final BranchInventoryRepository branchInventoryRepository;
     private final InventoryLotRepository inventoryLotRepository;
+    private final PrescriptionService prescriptionService;
 
     @Transactional
     public CustomerBillResponse create(CustomerBillCreateRequest request) {
         Branch branch = branchRepository.findByIdAndDeletedAtIsNull(request.getBranchId())
                 .orElseThrow(() -> new ResourceNotFoundException("Branch not found"));
-        Customer customer = resolveCustomer(request.getCustomerId(), request.getPayments());
+        Customer customer = resolveCustomer(request.getCustomerId());
+        Patient patient = resolvePatient(request.getPatientId(), customer);
         List<CustomerBillItem> items = buildItems(request.getItems());
 
         BigDecimal subtotalAmount = items.stream()
@@ -82,6 +90,7 @@ public class CustomerBillService {
 
         CustomerBill bill = new CustomerBill();
         bill.setCustomer(customer);
+        bill.setPatient(patient);
         bill.setBranch(branch);
         bill.setBillNumber(normalize(request.getBillNumber()));
         bill.setBillDate(request.getBillDate());
@@ -100,10 +109,16 @@ public class CustomerBillService {
             payment.setCustomerBill(bill);
             bill.getPayments().add(payment);
         }
+        if (request.getPrescription() != null) {
+            if (patient == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "patientId is required when prescription data is provided");
+            }
+            bill.setPrescription(buildPrescription(request.getPrescription(), patient, bill, request.getBillDate()));
+        }
 
         CustomerBill saved = customerBillRepository.save(bill);
         applyInventoryEffects(branch, saved.getItems());
-        if (customer != null && balanceAmount.compareTo(BigDecimal.ZERO) > 0) {
+        if (balanceAmount.compareTo(BigDecimal.ZERO) > 0) {
             recordCustomerCredit(saved, customer);
         }
 
@@ -153,20 +168,32 @@ public class CustomerBillService {
                 .build();
     }
 
-    private Customer resolveCustomer(Long customerId, List<CustomerBillPaymentRequest> payments) {
-        boolean requiresCustomer = payments.stream()
-                .map(CustomerBillPaymentRequest::getPaymentMode)
-                .anyMatch(mode -> mode != PaymentMode.CASH);
+    private Customer resolveCustomer(Long customerId) {
+        return customerRepository.findByIdAndDeletedAtIsNull(customerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer not found"));
+    }
 
-        if (customerId == null) {
-            if (requiresCustomer) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "customerId is required for bank, cheque, or credit bills");
-            }
+    private Patient resolvePatient(Long patientId, Customer customer) {
+        if (patientId == null) {
             return null;
         }
 
-        return customerRepository.findByIdAndDeletedAtIsNull(customerId)
-                .orElseThrow(() -> new ResourceNotFoundException("Customer not found"));
+        Patient patient = patientRepository.findByIdAndDeletedAtIsNull(patientId)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient not found"));
+        if (!patient.getCustomer().getId().equals(customer.getId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "patient does not belong to the selected customer");
+        }
+        return patient;
+    }
+
+    private Prescription buildPrescription(PrescriptionRequest request, Patient patient, CustomerBill bill, java.time.LocalDate billDate) {
+        Prescription prescription = new Prescription();
+        prescription.setPatient(patient);
+        prescription.setCustomerBill(bill);
+        prescription.setPrescriptionDate(request.getPrescriptionDate() == null ? billDate : request.getPrescriptionDate());
+        prescription.setValues(request.getValues());
+        prescription.setNotes(normalize(request.getNotes()));
+        return prescription;
     }
 
     private List<CustomerBillItem> buildItems(List<CustomerBillItemRequest> requests) {
@@ -401,6 +428,8 @@ public class CustomerBillService {
                 .customerId(bill.getCustomer() == null ? null : bill.getCustomer().getId())
                 .customerName(bill.getCustomer() == null ? null : bill.getCustomer().getName())
                 .customerPendingAmount(bill.getCustomer() == null ? null : bill.getCustomer().getPendingAmount())
+                .patientId(bill.getPatient() == null ? null : bill.getPatient().getId())
+                .patientName(bill.getPatient() == null ? null : bill.getPatient().getName())
                 .branchId(bill.getBranch().getId())
                 .branchName(bill.getBranch().getName())
                 .billNumber(resolveBillReference(bill))
@@ -414,6 +443,7 @@ public class CustomerBillService {
                 .notes(bill.getNotes())
                 .items(bill.getItems().stream().map(this::mapItem).toList())
                 .payments(bill.getPayments().stream().map(this::mapPayment).toList())
+                .prescription(bill.getPrescription() == null ? null : prescriptionService.mapResponse(bill.getPrescription()))
                 .build();
     }
 
@@ -422,6 +452,8 @@ public class CustomerBillService {
                 .id(bill.getId())
                 .customerId(bill.getCustomer() == null ? null : bill.getCustomer().getId())
                 .customerName(bill.getCustomer() == null ? null : bill.getCustomer().getName())
+                .patientId(bill.getPatient() == null ? null : bill.getPatient().getId())
+                .patientName(bill.getPatient() == null ? null : bill.getPatient().getName())
                 .branchId(bill.getBranch().getId())
                 .branchName(bill.getBranch().getName())
                 .billNumber(resolveBillReference(bill))
@@ -432,6 +464,7 @@ public class CustomerBillService {
                 .paidAmount(bill.getPaidAmount())
                 .balanceAmount(bill.getBalanceAmount())
                 .currencyCode(bill.getCurrencyCode())
+                .prescriptionId(bill.getPrescription() == null ? null : bill.getPrescription().getId())
                 .build();
     }
 
