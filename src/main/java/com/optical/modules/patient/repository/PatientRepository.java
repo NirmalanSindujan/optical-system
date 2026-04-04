@@ -3,6 +3,7 @@ package com.optical.modules.patient.repository;
 import com.optical.modules.patient.entity.Patient;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,8 +12,20 @@ import java.util.Optional;
 
 public interface PatientRepository extends JpaRepository<Patient, Long> {
 
+    @EntityGraph(attributePaths = {"customer"})
     Optional<Patient> findByIdAndDeletedAtIsNull(Long id);
 
+    @Query("""
+            select count(p)
+            from Patient p
+            join p.customer c
+            where p.deletedAt is null
+              and c.deletedAt is null
+              and c.id = :customerId
+            """)
+    long countActiveByCustomerId(@Param("customerId") Long customerId);
+
+    @EntityGraph(attributePaths = {"customer"})
     @Query("""
             select p
             from Patient p

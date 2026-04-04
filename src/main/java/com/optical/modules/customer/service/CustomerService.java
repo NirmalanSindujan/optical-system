@@ -3,13 +3,19 @@ package com.optical.modules.customer.service;
 import com.optical.modules.customer.dto.CustomerPageResponse;
 import com.optical.modules.customer.dto.CustomerRequest;
 import com.optical.modules.customer.dto.CustomerResponse;
+import com.optical.modules.customer.dto.CustomerSummaryResponse;
 import com.optical.modules.customer.entity.Customer;
 import com.optical.modules.customer.repository.CustomerRepository;
+import com.optical.modules.billing.repository.CustomerBillRepository;
+import com.optical.modules.patient.repository.PatientRepository;
+import com.optical.modules.prescription.repository.PrescriptionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -20,6 +26,9 @@ import static com.optical.common.util.StringNormalizer.normalize;
 public class CustomerService {
 
     private final CustomerRepository customerRepository;
+    private final CustomerBillRepository customerBillRepository;
+    private final PatientRepository patientRepository;
+    private final PrescriptionRepository prescriptionRepository;
 
     public CustomerResponse create(CustomerRequest request) {
         String normalizedPhone = normalize(request.getPhone());
@@ -67,6 +76,24 @@ public class CustomerService {
         Customer customer = customerRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
         return mapToResponse(customer);
+    }
+
+    @Transactional(readOnly = true)
+    public CustomerSummaryResponse getSummary(Long id) {
+        Customer customer = customerRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new RuntimeException("Customer not found"));
+
+        return CustomerSummaryResponse.builder()
+                .customerId(customer.getId())
+                .customerName(customer.getName())
+                .pendingAmount(zeroIfNull(customer.getPendingAmount()))
+                .totalBills(customerBillRepository.countActiveByCustomerId(id))
+                .totalBilledAmount(zeroIfNull(customerBillRepository.sumTotalAmountByCustomerId(id)))
+                .totalPaidAmount(zeroIfNull(customerBillRepository.sumPaidAmountByCustomerId(id)))
+                .totalOutstandingAmount(zeroIfNull(customerBillRepository.sumBalanceAmountByCustomerId(id)))
+                .totalPatients(patientRepository.countActiveByCustomerId(id))
+                .totalPrescriptions(prescriptionRepository.countActiveByCustomerId(id))
+                .build();
     }
 
     public CustomerResponse update(Long id, CustomerRequest request) {
@@ -119,5 +146,9 @@ public class CustomerService {
                 .notes(customer.getNotes())
                 .pendingAmount(customer.getPendingAmount())
                 .build();
+    }
+
+    private BigDecimal zeroIfNull(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 }

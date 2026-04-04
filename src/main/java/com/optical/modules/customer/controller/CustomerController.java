@@ -3,6 +3,7 @@ package com.optical.modules.customer.controller;
 import com.optical.modules.customer.dto.CustomerPageResponse;
 import com.optical.modules.customer.dto.CustomerRequest;
 import com.optical.modules.customer.dto.CustomerResponse;
+import com.optical.modules.customer.dto.CustomerSummaryResponse;
 import com.optical.modules.customer.service.CustomerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,11 @@ public class CustomerController {
     @GetMapping("/{id}")
     public CustomerResponse getById(@PathVariable Long id) {
         return customerService.getById(id);
+    }
+
+    @GetMapping("/{id}/summary")
+    public CustomerSummaryResponse getSummary(@PathVariable Long id) {
+        return customerService.getSummary(id);
     }
 
     @PutMapping("/{id}")

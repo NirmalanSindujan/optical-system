@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,6 +26,7 @@ public class PatientService {
     private final PatientRepository patientRepository;
     private final CustomerRepository customerRepository;
 
+    @Transactional
     public PatientResponse create(Long customerId, PatientRequest request) {
         Customer customer = findCustomer(customerId);
 
@@ -35,6 +37,7 @@ public class PatientService {
         return mapToResponse(patientRepository.save(patient));
     }
 
+    @Transactional(readOnly = true)
     public PatientPageResponse searchByCustomer(Long customerId, String q, int page, int size) {
         findCustomer(customerId);
         Page<Patient> result = patientRepository.searchByCustomerId(customerId, normalize(q), PageRequest.of(page, size));
@@ -51,16 +54,19 @@ public class PatientService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public PatientResponse getById(Long id) {
         return mapToResponse(findPatient(id));
     }
 
+    @Transactional
     public PatientResponse update(Long id, PatientRequest request) {
         Patient patient = findPatient(id);
         applyRequest(patient, request);
         return mapToResponse(patientRepository.save(patient));
     }
 
+    @Transactional
     public void delete(Long id) {
         Patient patient = findPatient(id);
         patient.setDeletedAt(LocalDateTime.now());

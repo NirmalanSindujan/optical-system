@@ -48,6 +48,38 @@ public interface CustomerBillRepository extends JpaRepository<CustomerBill, Long
     List<CustomerBill> findByIdIn(List<Long> ids);
 
     @Query("""
+            select count(b)
+            from CustomerBill b
+            where b.deletedAt is null
+              and b.customer.id = :customerId
+            """)
+    long countActiveByCustomerId(@Param("customerId") Long customerId);
+
+    @Query("""
+            select coalesce(sum(b.totalAmount), 0)
+            from CustomerBill b
+            where b.deletedAt is null
+              and b.customer.id = :customerId
+            """)
+    BigDecimal sumTotalAmountByCustomerId(@Param("customerId") Long customerId);
+
+    @Query("""
+            select coalesce(sum(b.paidAmount), 0)
+            from CustomerBill b
+            where b.deletedAt is null
+              and b.customer.id = :customerId
+            """)
+    BigDecimal sumPaidAmountByCustomerId(@Param("customerId") Long customerId);
+
+    @Query("""
+            select coalesce(sum(b.balanceAmount), 0)
+            from CustomerBill b
+            where b.deletedAt is null
+              and b.customer.id = :customerId
+            """)
+    BigDecimal sumBalanceAmountByCustomerId(@Param("customerId") Long customerId);
+
+    @Query("""
             select coalesce(sum(b.totalAmount), 0)
             from CustomerBill b
             where b.deletedAt is null
