@@ -15,6 +15,8 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public interface CustomerBillPaymentRepository extends JpaRepository<CustomerBillPayment, Long> {
 
@@ -103,4 +105,70 @@ public interface CustomerBillPaymentRepository extends JpaRepository<CustomerBil
               )
             """)
     BigDecimal sumCashCollectionsByBranchId(@Param("branchId") Long branchId);
+
+    @EntityGraph(attributePaths = {"customerBill", "customerBill.customer", "customerBill.branch"})
+    @Query("""
+            select p
+            from CustomerBillPayment p
+            join p.customerBill b
+            where p.deletedAt is null
+              and b.deletedAt is null
+              and b.branch.id = :branchId
+              and p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CASH
+            order by p.createdAt asc, p.id asc
+            """)
+    List<CustomerBillPayment> findCashLedgerEntriesByBranchId(@Param("branchId") Long branchId);
+
+    @EntityGraph(attributePaths = {"customerBill", "customerBill.customer", "customerBill.branch"})
+    @Query("""
+            select p
+            from CustomerBillPayment p
+            join p.customerBill b
+            where p.deletedAt is null
+              and b.deletedAt is null
+              and b.branch.id = :branchId
+              and p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CASH
+              and p.createdAt >= :fromDateTime
+            order by p.createdAt asc, p.id asc
+            """)
+    List<CustomerBillPayment> findCashLedgerEntriesByBranchIdAndCreatedAtGreaterThanEqual(
+            @Param("branchId") Long branchId,
+            @Param("fromDateTime") LocalDateTime fromDateTime
+    );
+
+    @EntityGraph(attributePaths = {"customerBill", "customerBill.customer", "customerBill.branch"})
+    @Query("""
+            select p
+            from CustomerBillPayment p
+            join p.customerBill b
+            where p.deletedAt is null
+              and b.deletedAt is null
+              and b.branch.id = :branchId
+              and p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CASH
+              and p.createdAt < :toDateTime
+            order by p.createdAt asc, p.id asc
+            """)
+    List<CustomerBillPayment> findCashLedgerEntriesByBranchIdAndCreatedAtLessThan(
+            @Param("branchId") Long branchId,
+            @Param("toDateTime") LocalDateTime toDateTime
+    );
+
+    @EntityGraph(attributePaths = {"customerBill", "customerBill.customer", "customerBill.branch"})
+    @Query("""
+            select p
+            from CustomerBillPayment p
+            join p.customerBill b
+            where p.deletedAt is null
+              and b.deletedAt is null
+              and b.branch.id = :branchId
+              and p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CASH
+              and p.createdAt >= :fromDateTime
+              and p.createdAt < :toDateTime
+            order by p.createdAt asc, p.id asc
+            """)
+    List<CustomerBillPayment> findCashLedgerEntriesByBranchIdAndCreatedAtBetween(
+            @Param("branchId") Long branchId,
+            @Param("fromDateTime") LocalDateTime fromDateTime,
+            @Param("toDateTime") LocalDateTime toDateTime
+    );
 }

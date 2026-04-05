@@ -1,6 +1,7 @@
 package com.optical.modules.finance.controller;
 
 import com.optical.modules.finance.dto.BusinessSummaryResponse;
+import com.optical.modules.finance.dto.CashLedgerResponse;
 import com.optical.modules.finance.service.BusinessSummaryService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -8,7 +9,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/finance")
@@ -23,5 +27,14 @@ public class BusinessSummaryController {
     @GetMapping("/business-summary")
     public BusinessSummaryResponse getSummary() {
         return businessSummaryService.getSummary();
+    }
+
+    @GetMapping("/cash-ledger")
+    public CashLedgerResponse getCashLedger(
+            @RequestParam Long branchId,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate
+    ) {
+        return businessSummaryService.getCashLedger(branchId, fromDate, toDate);
     }
 }
