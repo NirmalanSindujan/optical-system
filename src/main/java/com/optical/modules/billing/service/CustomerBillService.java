@@ -1,6 +1,7 @@
 package com.optical.modules.billing.service;
 
 import com.optical.common.exception.ResourceNotFoundException;
+import com.optical.common.enums.ChequeStatus;
 import com.optical.modules.billing.dto.BranchCollectionSummaryResponse;
 import com.optical.modules.billing.dto.CustomerBillCreateRequest;
 import com.optical.modules.billing.dto.CustomerBillItemRequest;
@@ -243,6 +244,8 @@ public class CustomerBillService {
                 payment.setChequeBankName(normalize(request.getChequeBankName()));
                 payment.setChequeBranchName(normalize(request.getChequeBranchName()));
                 payment.setChequeAccountHolder(normalize(request.getChequeAccountHolder()));
+                payment.setChequeStatus(ChequeStatus.PENDING);
+                payment.setChequeStatusChangedAt(java.time.LocalDateTime.now());
             }
 
             payments.add(payment);
@@ -492,7 +495,10 @@ public class CustomerBillService {
                 .chequeBankName(payment.getChequeBankName())
                 .chequeBranchName(payment.getChequeBranchName())
                 .chequeAccountHolder(payment.getChequeAccountHolder())
+                .chequeSettlementMode(payment.getChequeSettlementMode())
                 .reference(payment.getReference())
+                .chequeStatus(payment.getChequeStatus())
+                .chequeStatusNotes(payment.getChequeStatusNotes())
                 .build();
     }
 

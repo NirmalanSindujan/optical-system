@@ -1,6 +1,7 @@
 package com.optical.modules.billing.entity;
 
 import com.optical.common.base.BaseEntity;
+import com.optical.common.enums.ChequeStatus;
 import com.optical.modules.purchase.entity.PaymentMode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -15,6 +16,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "customer_bill_payment")
@@ -50,4 +52,18 @@ public class CustomerBillPayment extends BaseEntity {
 
     @Column(length = 150)
     private String reference;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cheque_status", length = 20)
+    private ChequeStatus chequeStatus;
+
+    @Column(name = "cheque_status_notes", columnDefinition = "TEXT")
+    private String chequeStatusNotes;
+
+    @Column(name = "cheque_status_changed_at")
+    private LocalDateTime chequeStatusChangedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cheque_settlement_mode", length = 20)
+    private PaymentMode chequeSettlementMode;
 }

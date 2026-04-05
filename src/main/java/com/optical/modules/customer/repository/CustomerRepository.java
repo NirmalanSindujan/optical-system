@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.math.BigDecimal;
 
 public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
@@ -32,4 +33,11 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
               )
             """)
     Page<Customer> search(@Param("q") String q, Pageable pageable);
+
+    @Query("""
+            select coalesce(sum(c.pendingAmount), 0)
+            from Customer c
+            where c.deletedAt is null
+            """)
+    BigDecimal sumPendingAmount();
 }

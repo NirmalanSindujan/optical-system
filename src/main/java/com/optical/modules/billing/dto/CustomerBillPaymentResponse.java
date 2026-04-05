@@ -1,5 +1,6 @@
 package com.optical.modules.billing.dto;
 
+import com.optical.common.enums.ChequeStatus;
 import com.optical.modules.purchase.entity.PaymentMode;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,5 +19,8 @@ public class CustomerBillPaymentResponse {
     private String chequeBankName;
     private String chequeBranchName;
     private String chequeAccountHolder;
+    private PaymentMode chequeSettlementMode;
     private String reference;
+    private ChequeStatus chequeStatus;
+    private String chequeStatusNotes;
 }

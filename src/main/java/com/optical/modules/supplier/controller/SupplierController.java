@@ -1,9 +1,13 @@
 package com.optical.modules.supplier.controller;
 
+import com.optical.common.base.PageResponse;
+import com.optical.common.enums.ChequeStatus;
 import com.optical.modules.supplier.dto.SupplierCreditLedgerResponse;
 import com.optical.modules.supplier.dto.SupplierCreditSummaryResponse;
+import com.optical.modules.supplier.dto.SupplierChequeStatusUpdateRequest;
 import com.optical.modules.supplier.dto.SupplierPageResponse;
 import com.optical.modules.supplier.dto.SupplierPaymentRequest;
+import com.optical.modules.supplier.dto.SupplierProvidedChequeResponse;
 import com.optical.modules.supplier.dto.SupplierProductStockResponse;
 import com.optical.modules.supplier.dto.SupplierRequest;
 import com.optical.modules.supplier.dto.SupplierResponse;
@@ -81,5 +85,25 @@ public class SupplierController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
     public SuplierPendingBillsResponse getPendingBills(@PathVariable Long id) {
         return stockPurchaseService.getPendingBillsBySupplier(id);
+    }
+
+    @GetMapping("/provided-cheques")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    public PageResponse<SupplierProvidedChequeResponse> getProvidedCheques(
+            @RequestParam(required = false) Long supplierId,
+            @RequestParam(required = false) ChequeStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return supplierCreditService.getProvidedCheques(supplierId, status, page, size);
+    }
+
+    @PatchMapping("/provided-cheques/{ledgerId}/status")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    public SupplierProvidedChequeResponse updateProvidedChequeStatus(
+            @PathVariable Long ledgerId,
+            @Valid @RequestBody SupplierChequeStatusUpdateRequest request
+    ) {
+        return supplierCreditService.updateProvidedChequeStatus(ledgerId, request);
     }
 }

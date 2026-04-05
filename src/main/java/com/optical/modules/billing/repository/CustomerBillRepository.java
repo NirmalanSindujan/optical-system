@@ -79,6 +79,27 @@ public interface CustomerBillRepository extends JpaRepository<CustomerBill, Long
             """)
     BigDecimal sumBalanceAmountByCustomerId(@Param("customerId") Long customerId);
 
+    @EntityGraph(attributePaths = {"customer"})
+    @Query("""
+            select b
+            from CustomerBill b
+            where b.deletedAt is null
+              and b.customer.id = :customerId
+              and b.balanceAmount > 0
+            order by b.billDate desc, b.id desc
+            """)
+    List<CustomerBill> findPendingBillsByCustomerId(@Param("customerId") Long customerId);
+
+    @EntityGraph(attributePaths = {"customer"})
+    @Query("""
+            select b
+            from CustomerBill b
+            where b.deletedAt is null
+              and b.customer.id = :customerId
+              and b.id in :billIds
+            """)
+    List<CustomerBill> findActiveByCustomerIdAndIdIn(@Param("customerId") Long customerId, @Param("billIds") List<Long> billIds);
+
     @Query("""
             select coalesce(sum(b.totalAmount), 0)
             from CustomerBill b
