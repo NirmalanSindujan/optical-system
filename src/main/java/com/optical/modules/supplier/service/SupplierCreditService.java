@@ -3,6 +3,8 @@ package com.optical.modules.supplier.service;
 import com.optical.common.base.PageResponse;
 import com.optical.common.exception.ResourceNotFoundException;
 import com.optical.common.enums.ChequeStatus;
+import com.optical.modules.branch.entity.Branch;
+import com.optical.modules.branch.repository.BranchRepository;
 import com.optical.modules.purchase.entity.StockPurchase;
 import com.optical.modules.purchase.entity.PaymentMode;
 import com.optical.modules.purchase.repository.StockPurchaseRepository;
@@ -45,6 +47,7 @@ import static com.optical.common.util.StringNormalizer.normalize;
 public class SupplierCreditService {
 
     private final SupplierRepository supplierRepository;
+    private final BranchRepository branchRepository;
     private final SupplierCreditLedgerRepository supplierCreditLedgerRepository;
     private final SupplierPaymentAllocationRepository supplierPaymentAllocationRepository;
     private final StockPurchaseRepository stockPurchaseRepository;
@@ -91,9 +94,11 @@ public class SupplierCreditService {
         }
 
         supplier.setPendingAmount(scale(pendingAmount.subtract(amount)));
+        Branch branch = resolveBranch(request.getBranchId());
 
         SupplierCreditLedger ledger = new SupplierCreditLedger();
         ledger.setSupplier(supplier);
+        ledger.setBranch(branch);
         ledger.setEntryDate(request.getPaymentDate());
         ledger.setAmount(scale(amount.negate()));
         ledger.setEntryType(SupplierCreditEntryType.PAYMENT);
@@ -179,6 +184,8 @@ public class SupplierCreditService {
                 .amount(ledger.getAmount())
                 .entryType(ledger.getEntryType())
                 .paymentMode(ledger.getPaymentMode())
+                .branchId(ledger.getBranch() == null ? null : ledger.getBranch().getId())
+                .branchName(ledger.getBranch() == null ? null : ledger.getBranch().getName())
                 .reference(ledger.getReference())
                 .notes(ledger.getNotes())
                 .chequeNumber(ledger.getChequeNumber())
@@ -280,6 +287,8 @@ public class SupplierCreditService {
                 .supplierName(supplier == null ? null : supplier.getName())
                 .paymentDate(ledger.getEntryDate())
                 .amount(scale(ledger.getAmount().abs()))
+                .branchId(ledger.getBranch() == null ? null : ledger.getBranch().getId())
+                .branchName(ledger.getBranch() == null ? null : ledger.getBranch().getName())
                 .chequeStatus(ledger.getChequeStatus())
                 .chequeNumber(ledger.getChequeNumber())
                 .chequeDate(ledger.getChequeDate())
@@ -306,6 +315,15 @@ public class SupplierCreditService {
 
     private boolean isFinanciallyApplied(ChequeStatus status) {
         return status == ChequeStatus.PENDING || status == ChequeStatus.CLEARED;
+    }
+
+    private Branch resolveBranch(Long branchId) {
+        if (branchId != null) {
+            return branchRepository.findByIdAndDeletedAtIsNull(branchId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Branch not found"));
+        }
+        return branchRepository.findFirstByIsMainTrueAndDeletedAtIsNull()
+                .orElseThrow(() -> new ResourceNotFoundException("Main branch not found"));
     }
 
     private void reverseProvidedCheque(SupplierCreditLedger ledger) {

@@ -2,8 +2,8 @@ package com.optical.modules.finance.service;
 
 import com.optical.common.enums.ChequeStatus;
 import com.optical.common.exception.ResourceNotFoundException;
-import com.optical.modules.billing.repository.CustomerBillPaymentRepository;
 import com.optical.modules.billing.entity.CustomerBillPayment;
+import com.optical.modules.billing.repository.CustomerBillPaymentRepository;
 import com.optical.modules.branch.entity.Branch;
 import com.optical.modules.branch.repository.BranchRepository;
 import com.optical.modules.expense.enums.ExpenseSource;
@@ -16,8 +16,7 @@ import com.optical.modules.finance.dto.CashLedgerResponse;
 import com.optical.modules.finance.dto.BranchCashSummaryResponse;
 import com.optical.modules.finance.dto.BusinessSummaryResponse;
 import com.optical.modules.purchase.entity.PaymentMode;
-import com.optical.modules.supplier.entity.SupplierPaymentAllocation;
-import com.optical.modules.supplier.repository.SupplierPaymentAllocationRepository;
+import com.optical.modules.supplier.entity.SupplierCreditLedger;
 import com.optical.modules.supplier.repository.SupplierCreditLedgerRepository;
 import com.optical.modules.supplier.repository.SupplierRepository;
 import com.optical.modules.customer.repository.CustomerRepository;
@@ -39,7 +38,6 @@ public class BusinessSummaryService {
 
     private final CustomerBillPaymentRepository customerBillPaymentRepository;
     private final SupplierCreditLedgerRepository supplierCreditLedgerRepository;
-    private final SupplierPaymentAllocationRepository supplierPaymentAllocationRepository;
     private final ExpenseRepository expenseRepository;
     private final CustomerRepository customerRepository;
     private final SupplierRepository supplierRepository;
@@ -74,6 +72,10 @@ public class BusinessSummaryService {
                                 .branchName(branch.getName())
                                 .cashInHand(scale(
                                         customerBillPaymentRepository.sumCashCollectionsByBranchId(branch.getId())
+                                                .subtract(scale(supplierCreditLedgerRepository.sumPaymentOutflowByBranchIdAndPaymentMode(
+                                                        branch.getId(),
+                                                        PaymentMode.CASH
+                                                )))
                                                 .subtract(scale(expenseRepository.sumAmountByBranchIdAndSource(
                                                         branch.getId(),
                                                         ExpenseSource.CASH
@@ -155,17 +157,17 @@ public class BusinessSummaryService {
         return customerBillPaymentRepository.findCashLedgerEntriesByBranchId(branchId);
     }
 
-    private List<SupplierPaymentAllocation> loadSupplierCashEntries(Long branchId, LocalDate fromDate, LocalDate toDate) {
+    private List<SupplierCreditLedger> loadSupplierCashEntries(Long branchId, LocalDate fromDate, LocalDate toDate) {
         if (fromDate != null && toDate != null) {
-            return supplierPaymentAllocationRepository.findCashLedgerEntriesByBranchIdAndEntryDateBetween(branchId, fromDate, toDate);
+            return supplierCreditLedgerRepository.findCashLedgerEntriesByBranchIdAndEntryDateBetween(branchId, fromDate, toDate);
         }
         if (fromDate != null) {
-            return supplierPaymentAllocationRepository.findCashLedgerEntriesByBranchIdAndEntryDateGreaterThanEqual(branchId, fromDate);
+            return supplierCreditLedgerRepository.findCashLedgerEntriesByBranchIdAndEntryDateGreaterThanEqual(branchId, fromDate);
         }
         if (toDate != null) {
-            return supplierPaymentAllocationRepository.findCashLedgerEntriesByBranchIdAndEntryDateLessThanEqual(branchId, toDate);
+            return supplierCreditLedgerRepository.findCashLedgerEntriesByBranchIdAndEntryDateLessThanEqual(branchId, toDate);
         }
-        return supplierPaymentAllocationRepository.findCashLedgerEntriesByBranchId(branchId);
+        return supplierCreditLedgerRepository.findCashLedgerEntriesByBranchId(branchId);
     }
 
     private CashLedgerEntryResponse mapCustomerCashEntry(CustomerBillPayment payment) {
@@ -175,18 +177,24 @@ public class BusinessSummaryService {
         String reference = payment.getReference() == null
                 ? payment.getCustomerBill().getBillNumber()
                 : payment.getReference();
+        boolean clearedChequeToCash = payment.getPaymentMode() == PaymentMode.CHEQUE
+                && payment.getChequeStatus() == ChequeStatus.CLEARED
+                && payment.getChequeSettlementMode() == PaymentMode.CASH;
+        LocalDateTime effectiveTimestamp = clearedChequeToCash
+                ? payment.getChequeStatusChangedAt()
+                : payment.getCreatedAt();
 
         return CashLedgerEntryResponse.builder()
                 .entryType(CashLedgerEntryType.CUSTOMER_BILL_PAYMENT)
                 .direction(CashLedgerEntryDirection.INCOME)
                 .transactionId(payment.getId())
-                .transactionDate(payment.getCreatedAt() == null
+                .transactionDate(effectiveTimestamp == null
                         ? payment.getCustomerBill().getBillDate()
-                        : payment.getCreatedAt().toLocalDate())
-                .createdAt(payment.getCreatedAt())
+                        : effectiveTimestamp.toLocalDate())
+                .createdAt(effectiveTimestamp)
                 .amount(scale(payment.getAmount()))
                 .reference(reference)
-                .description("Customer bill payment")
+                .description(clearedChequeToCash ? "Customer cheque cleared to cash" : "Customer bill payment")
                 .partyName(customerName)
                 .build();
     }
@@ -205,17 +213,17 @@ public class BusinessSummaryService {
                 .build();
     }
 
-    private CashLedgerEntryResponse mapSupplierCashEntry(SupplierPaymentAllocation allocation) {
+    private CashLedgerEntryResponse mapSupplierCashEntry(SupplierCreditLedger ledger) {
         return CashLedgerEntryResponse.builder()
                 .entryType(CashLedgerEntryType.SUPPLIER_PAYMENT)
                 .direction(CashLedgerEntryDirection.OUTGOING)
-                .transactionId(allocation.getId())
-                .transactionDate(allocation.getSupplierCreditLedger().getEntryDate())
-                .createdAt(allocation.getCreatedAt())
-                .amount(scale(allocation.getAmount()))
-                .reference(allocation.getSupplierCreditLedger().getReference())
-                .description("Supplier cash payment allocation")
-                .partyName(allocation.getSupplierCreditLedger().getSupplier().getName())
+                .transactionId(ledger.getId())
+                .transactionDate(ledger.getEntryDate())
+                .createdAt(ledger.getCreatedAt())
+                .amount(scale(ledger.getAmount().abs()))
+                .reference(ledger.getReference())
+                .description("Supplier cash payment")
+                .partyName(ledger.getSupplier().getName())
                 .build();
     }
 

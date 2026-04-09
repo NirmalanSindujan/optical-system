@@ -2,6 +2,7 @@ package com.optical.modules.supplier.entity;
 
 import com.optical.common.base.BaseEntity;
 import com.optical.common.enums.ChequeStatus;
+import com.optical.modules.branch.entity.Branch;
 import com.optical.modules.purchase.entity.PaymentMode;
 import com.optical.modules.purchase.entity.StockPurchase;
 import jakarta.persistence.Column;
@@ -35,6 +36,10 @@ public class SupplierCreditLedger extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "stock_purchase_id")
     private StockPurchase stockPurchase;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "branch_id")
+    private Branch branch;
 
     @Column(name = "entry_date", nullable = false)
     private LocalDate entryDate;

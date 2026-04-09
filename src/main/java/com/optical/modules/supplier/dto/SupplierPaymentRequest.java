@@ -30,6 +30,9 @@ public class SupplierPaymentRequest {
     @Schema(example = "5000.00")
     private BigDecimal amount;
 
+    @Schema(description = "Branch that issued the payment. Defaults to the main branch when omitted.", example = "1")
+    private Long branchId;
+
     @Schema(description = "Required when paymentMode is CHEQUE", example = "CHK-000145")
     private String chequeNumber;
     @Schema(description = "Required when paymentMode is CHEQUE", example = "2026-04-10")

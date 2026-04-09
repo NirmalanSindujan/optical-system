@@ -18,6 +18,8 @@ public class SupplierProvidedChequeResponse {
     private String supplierName;
     private LocalDate paymentDate;
     private BigDecimal amount;
+    private Long branchId;
+    private String branchName;
     private ChequeStatus chequeStatus;
     private String chequeNumber;
     private LocalDate chequeDate;

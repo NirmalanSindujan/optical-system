@@ -17,6 +17,8 @@ public interface PrescriptionRepository extends JpaRepository<Prescription, Long
 
     Optional<Prescription> findByCustomerBillIdAndDeletedAtIsNull(Long customerBillId);
 
+    Optional<Prescription> findFirstByNotesAndDeletedAtIsNull(String notes);
+
     @Query("""
             select count(pr)
             from Prescription pr

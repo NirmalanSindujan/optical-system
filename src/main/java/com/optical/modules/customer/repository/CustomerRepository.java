@@ -10,10 +10,14 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
     Optional<Customer> findByIdAndDeletedAtIsNull(Long id);
+    Optional<Customer> findFirstByPhoneAndDeletedAtIsNull(String phone);
+    Optional<Customer> findFirstByNameIgnoreCaseAndDobAndDeletedAtIsNull(String name, LocalDate dob);
+    Optional<Customer> findFirstByNameIgnoreCaseAndDeletedAtIsNull(String name);
 
     List<Customer> findAllByDeletedAtIsNull();
 

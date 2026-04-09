@@ -114,7 +114,14 @@ public interface CustomerBillPaymentRepository extends JpaRepository<CustomerBil
             where p.deletedAt is null
               and b.deletedAt is null
               and b.branch.id = :branchId
-              and p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CASH
+              and (
+                  p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CASH
+                  or (
+                      p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CHEQUE
+                      and p.chequeStatus = com.optical.common.enums.ChequeStatus.CLEARED
+                      and p.chequeSettlementMode = com.optical.modules.purchase.entity.PaymentMode.CASH
+                  )
+              )
             order by p.createdAt asc, p.id asc
             """)
     List<CustomerBillPayment> findCashLedgerEntriesByBranchId(@Param("branchId") Long branchId);
@@ -127,8 +134,15 @@ public interface CustomerBillPaymentRepository extends JpaRepository<CustomerBil
             where p.deletedAt is null
               and b.deletedAt is null
               and b.branch.id = :branchId
-              and p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CASH
-              and p.createdAt >= :fromDateTime
+              and (
+                  (p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CASH and p.createdAt >= :fromDateTime)
+                  or (
+                      p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CHEQUE
+                      and p.chequeStatus = com.optical.common.enums.ChequeStatus.CLEARED
+                      and p.chequeSettlementMode = com.optical.modules.purchase.entity.PaymentMode.CASH
+                      and p.chequeStatusChangedAt >= :fromDateTime
+                  )
+              )
             order by p.createdAt asc, p.id asc
             """)
     List<CustomerBillPayment> findCashLedgerEntriesByBranchIdAndCreatedAtGreaterThanEqual(
@@ -144,8 +158,15 @@ public interface CustomerBillPaymentRepository extends JpaRepository<CustomerBil
             where p.deletedAt is null
               and b.deletedAt is null
               and b.branch.id = :branchId
-              and p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CASH
-              and p.createdAt < :toDateTime
+              and (
+                  (p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CASH and p.createdAt < :toDateTime)
+                  or (
+                      p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CHEQUE
+                      and p.chequeStatus = com.optical.common.enums.ChequeStatus.CLEARED
+                      and p.chequeSettlementMode = com.optical.modules.purchase.entity.PaymentMode.CASH
+                      and p.chequeStatusChangedAt < :toDateTime
+                  )
+              )
             order by p.createdAt asc, p.id asc
             """)
     List<CustomerBillPayment> findCashLedgerEntriesByBranchIdAndCreatedAtLessThan(
@@ -161,9 +182,18 @@ public interface CustomerBillPaymentRepository extends JpaRepository<CustomerBil
             where p.deletedAt is null
               and b.deletedAt is null
               and b.branch.id = :branchId
-              and p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CASH
-              and p.createdAt >= :fromDateTime
-              and p.createdAt < :toDateTime
+              and (
+                  (p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CASH
+                      and p.createdAt >= :fromDateTime
+                      and p.createdAt < :toDateTime)
+                  or (
+                      p.paymentMode = com.optical.modules.purchase.entity.PaymentMode.CHEQUE
+                      and p.chequeStatus = com.optical.common.enums.ChequeStatus.CLEARED
+                      and p.chequeSettlementMode = com.optical.modules.purchase.entity.PaymentMode.CASH
+                      and p.chequeStatusChangedAt >= :fromDateTime
+                      and p.chequeStatusChangedAt < :toDateTime
+                  )
+              )
             order by p.createdAt asc, p.id asc
             """)
     List<CustomerBillPayment> findCashLedgerEntriesByBranchIdAndCreatedAtBetween(

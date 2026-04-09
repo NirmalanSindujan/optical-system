@@ -19,6 +19,8 @@ public class SupplierCreditLedgerResponse {
     private BigDecimal amount;
     private SupplierCreditEntryType entryType;
     private PaymentMode paymentMode;
+    private Long branchId;
+    private String branchName;
     private String reference;
     private String notes;
     private String chequeNumber;

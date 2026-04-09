@@ -15,6 +15,22 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
     @EntityGraph(attributePaths = {"customer"})
     Optional<Patient> findByIdAndDeletedAtIsNull(Long id);
 
+    @EntityGraph(attributePaths = {"customer"})
+    @Query("""
+            select p
+            from Patient p
+            join p.customer c
+            where p.deletedAt is null
+              and c.deletedAt is null
+              and c.id = :customerId
+              and lower(p.name) = lower(:name)
+            order by p.id asc
+            """)
+    Optional<Patient> findFirstByCustomerIdAndNameIgnoreCase(
+            @Param("customerId") Long customerId,
+            @Param("name") String name
+    );
+
     @Query("""
             select count(p)
             from Patient p
