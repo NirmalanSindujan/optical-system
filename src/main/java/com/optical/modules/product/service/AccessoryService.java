@@ -96,6 +96,7 @@ public class AccessoryService {
         variant.setQuantity(request.getQuantity());
         variant.setIsActive(true);
         ProductVariant savedVariant = productVariantRepository.save(variant);
+        productSupportService.initializeMainBranchInventory(savedVariant);
 
         AccessoryVariantDetails details = new AccessoryVariantDetails();
         details.setVariant(savedVariant);

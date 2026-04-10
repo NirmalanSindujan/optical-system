@@ -1,10 +1,17 @@
 package com.optical.modules.product.service;
 
 import com.optical.common.exception.ResourceNotFoundException;
+import com.optical.modules.branch.entity.Branch;
+import com.optical.modules.branch.repository.BranchRepository;
 import com.optical.modules.product.dto.SupplierInfoResponse;
+import com.optical.modules.product.entity.BranchInventory;
+import com.optical.modules.product.entity.BranchInventoryId;
+import com.optical.modules.product.entity.InventoryLot;
 import com.optical.modules.product.entity.Product;
 import com.optical.modules.product.entity.ProductVariant;
 import com.optical.modules.product.entity.SupplierProduct;
+import com.optical.modules.product.repository.BranchInventoryRepository;
+import com.optical.modules.product.repository.InventoryLotRepository;
 import com.optical.modules.product.repository.ProductRepository;
 import com.optical.modules.product.repository.ProductVariantRepository;
 import com.optical.modules.product.repository.SupplierProductRepository;
@@ -29,8 +36,11 @@ public class ProductSupportService {
 
     private final ProductRepository productRepository;
     private final ProductVariantRepository productVariantRepository;
+    private final BranchInventoryRepository branchInventoryRepository;
+    private final InventoryLotRepository inventoryLotRepository;
     private final SupplierProductRepository supplierProductRepository;
     private final SupplierRepository supplierRepository;
+    private final BranchRepository branchRepository;
 
     public List<Long> resolveAndValidateSupplierIds(List<Long> rawSupplierIds, String requiredMessage) {
         List<Long> normalized = rawSupplierIds == null
@@ -65,6 +75,45 @@ public class ProductSupportService {
     public void replaceSupplierLinks(Product product, List<Long> supplierIds) {
         supplierProductRepository.softDeleteActiveByProductId(product.getId(), LocalDateTime.now());
         linkSuppliersToProduct(product, supplierIds);
+    }
+
+    public void initializeMainBranchInventory(ProductVariant variant) {
+        BigDecimal quantity = variant.getQuantity();
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        Branch mainBranch = branchRepository.findFirstByIsMainTrueAndDeletedAtIsNull()
+                .orElseThrow(() -> new ResourceNotFoundException("Main branch not found"));
+
+        BranchInventory inventory = branchInventoryRepository
+                .findByBranch_IdAndVariant_Id(mainBranch.getId(), variant.getId())
+                .orElseGet(() -> {
+                    BranchInventory created = new BranchInventory();
+                    BranchInventoryId id = new BranchInventoryId();
+                    id.setBranchId(mainBranch.getId());
+                    id.setVariantId(variant.getId());
+                    created.setId(id);
+                    created.setBranch(mainBranch);
+                    created.setVariant(variant);
+                    created.setOnHand(BigDecimal.ZERO);
+                    created.setReserved(BigDecimal.ZERO);
+                    created.setReorderLevel(BigDecimal.ZERO);
+                    return created;
+                });
+
+        inventory.setOnHand(zeroIfNull(inventory.getOnHand()).add(quantity));
+        branchInventoryRepository.save(inventory);
+
+        InventoryLot openingLot = new InventoryLot();
+        openingLot.setVariant(variant);
+        openingLot.setPurchasedAt(LocalDateTime.now());
+        openingLot.setPurchaseCost(variant.getPurchasePrice());
+        openingLot.setCurrencyCode("LKR");
+        openingLot.setQtyReceived(quantity);
+        openingLot.setQtyRemaining(quantity);
+        openingLot.setNotes("OPENING_STOCK main-branch=" + mainBranch.getId());
+        inventoryLotRepository.save(openingLot);
     }
 
     @Transactional
@@ -125,5 +174,9 @@ public class ProductSupportService {
                 .phone(supplier.getPhone())
                 .email(supplier.getEmail())
                 .build();
+    }
+
+    private BigDecimal zeroIfNull(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 }

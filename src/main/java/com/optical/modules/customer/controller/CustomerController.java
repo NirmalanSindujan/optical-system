@@ -3,6 +3,8 @@ package com.optical.modules.customer.controller;
 import com.optical.common.base.PageResponse;
 import com.optical.common.enums.ChequeStatus;
 import com.optical.modules.customer.dto.CustomerChequeStatusUpdateRequest;
+import com.optical.modules.customer.dto.CustomerOpeningBalancePaymentRequest;
+import com.optical.modules.customer.dto.CustomerOpeningBalancePaymentResponse;
 import com.optical.modules.customer.dto.CustomerPageResponse;
 import com.optical.modules.customer.dto.CustomerPendingBillsResponse;
 import com.optical.modules.customer.dto.CustomerPendingPaymentRequest;
@@ -58,6 +60,14 @@ public class CustomerController {
             @Valid @RequestBody CustomerPendingPaymentRequest request
     ) {
         return customerService.payPendingBills(id, request);
+    }
+
+    @PostMapping("/{id}/opening-balance-payments")
+    public CustomerOpeningBalancePaymentResponse payOpeningBalance(
+            @PathVariable Long id,
+            @Valid @RequestBody CustomerOpeningBalancePaymentRequest request
+    ) {
+        return customerService.payOpeningBalance(id, request);
     }
 
     @GetMapping("/received-cheques")

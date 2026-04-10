@@ -103,6 +103,7 @@ public class BifocalService {
             variant.setQuantity(request.getQuantity());
             variant.setIsActive(true);
             ProductVariant savedVariant = productVariantRepository.save(variant);
+            productSupportService.initializeMainBranchInventory(savedVariant);
 
             LensVariantDetails details = new LensVariantDetails();
             details.setVariant(savedVariant);

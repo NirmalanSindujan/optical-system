@@ -9,6 +9,8 @@ import com.optical.modules.billing.repository.CustomerBillPaymentRepository;
 import com.optical.modules.billing.repository.CustomerBillRepository;
 import com.optical.modules.customer.dto.CustomerPageResponse;
 import com.optical.modules.customer.dto.CustomerChequeStatusUpdateRequest;
+import com.optical.modules.customer.dto.CustomerOpeningBalancePaymentRequest;
+import com.optical.modules.customer.dto.CustomerOpeningBalancePaymentResponse;
 import com.optical.modules.customer.dto.CustomerPendingBillResponse;
 import com.optical.modules.customer.dto.CustomerPendingBillsResponse;
 import com.optical.modules.customer.dto.CustomerPendingPaymentAllocationRequest;
@@ -69,6 +71,7 @@ public class CustomerService {
         Customer customer = new Customer();
         applyRequest(customer, request);
         Customer saved = customerRepository.save(customer);
+        recordOpeningBalance(saved);
         return mapToResponse(saved);
     }
 
@@ -208,6 +211,47 @@ public class CustomerService {
                 .build();
     }
 
+    @Transactional
+    public CustomerOpeningBalancePaymentResponse payOpeningBalance(Long id, CustomerOpeningBalancePaymentRequest request) {
+        Customer customer = customerRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer not found"));
+
+        if (request.getPaymentMode() == com.optical.modules.purchase.entity.PaymentMode.CREDIT) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Customer payment mode cannot be CREDIT");
+        }
+        if (request.getPaymentMode() == com.optical.modules.purchase.entity.PaymentMode.CHEQUE) {
+            validateChequeDetails(
+                    request.getChequeNumber(),
+                    request.getChequeDate(),
+                    request.getChequeBankName()
+            );
+        }
+
+        BigDecimal amount = scale(request.getAmount());
+        BigDecimal currentPendingAmount = scale(zeroIfNull(customer.getPendingAmount()));
+        if (amount.compareTo(currentPendingAmount) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Payment amount cannot exceed customer pending amount");
+        }
+
+        customer.setPendingAmount(scale(currentPendingAmount.subtract(amount)));
+
+        CustomerCreditLedger ledger = new CustomerCreditLedger();
+        ledger.setCustomer(customer);
+        ledger.setAmount(scale(amount.negate()));
+        ledger.setEntryType("OPENING_PAYMENT");
+        ledger.setReference(resolvePaymentReference(request.getReference()));
+        customerCreditLedgerRepository.save(ledger);
+
+        return CustomerOpeningBalancePaymentResponse.builder()
+                .customerId(customer.getId())
+                .customerName(customer.getName())
+                .paymentMode(request.getPaymentMode())
+                .amount(amount)
+                .reference(normalize(request.getReference()))
+                .totalPendingAmount(customer.getPendingAmount())
+                .build();
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<CustomerReceivedChequeResponse> getReceivedCheques(Long customerId, ChequeStatus status, int page, int size) {
         Page<CustomerBillPayment> result = customerBillPaymentRepository.findReceivedCheques(
@@ -295,6 +339,7 @@ public class CustomerService {
         customer.setGender(request.getGender());
         customer.setDob(request.getDob());
         customer.setNotes(request.getNotes());
+        customer.setPendingAmount(resolvePendingAmount(request.getPendingAmount()));
     }
 
     private CustomerResponse mapToResponse(Customer customer) {
@@ -377,13 +422,17 @@ public class CustomerService {
     }
 
     private void validateChequeDetails(CustomerPendingPaymentRequest request) {
-        if (normalize(request.getChequeNumber()) == null) {
+        validateChequeDetails(request.getChequeNumber(), request.getChequeDate(), request.getChequeBankName());
+    }
+
+    private void validateChequeDetails(String chequeNumber, java.time.LocalDate chequeDate, String chequeBankName) {
+        if (normalize(chequeNumber) == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "chequeNumber is required for cheque payments");
         }
-        if (request.getChequeDate() == null) {
+        if (chequeDate == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "chequeDate is required for cheque payments");
         }
-        if (normalize(request.getChequeBankName()) == null) {
+        if (normalize(chequeBankName) == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "chequeBankName is required for cheque payments");
         }
     }
@@ -391,6 +440,28 @@ public class CustomerService {
     private String resolvePaymentReference(String reference) {
         String normalizedReference = normalize(reference);
         return normalizedReference == null ? "CUSTOMER-PAYMENT" : normalizedReference;
+    }
+
+    private BigDecimal resolvePendingAmount(BigDecimal pendingAmount) {
+        BigDecimal resolved = pendingAmount == null ? BigDecimal.ZERO : scale(pendingAmount);
+        if (resolved.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "pendingAmount cannot be negative");
+        }
+        return resolved;
+    }
+
+    private void recordOpeningBalance(Customer customer) {
+        BigDecimal pendingAmount = scale(zeroIfNull(customer.getPendingAmount()));
+        if (pendingAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        CustomerCreditLedger ledger = new CustomerCreditLedger();
+        ledger.setCustomer(customer);
+        ledger.setAmount(pendingAmount);
+        ledger.setEntryType("OPENING_BALANCE");
+        ledger.setReference("CUSTOMER-OPENING-BALANCE");
+        customerCreditLedgerRepository.save(ledger);
     }
 
     private CustomerReceivedChequeResponse mapReceivedCheque(CustomerBillPayment payment) {

@@ -93,6 +93,7 @@ public class SunglassService {
         variant.setQuantity(request.getQuantity());
         variant.setIsActive(true);
         ProductVariant savedVariant = productVariantRepository.save(variant);
+        productSupportService.initializeMainBranchInventory(savedVariant);
 
         SunglassesVariantDetails details = new SunglassesVariantDetails();
         details.setVariant(savedVariant);

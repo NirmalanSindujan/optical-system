@@ -80,6 +80,7 @@ public class FrameService {
         variant.setQuantity(request.getQuantity());
         variant.setIsActive(true);
         ProductVariant savedVariant = productVariantRepository.save(variant);
+        productSupportService.initializeMainBranchInventory(savedVariant);
 
         FrameVariantDetails details = new FrameVariantDetails();
         details.setVariant(savedVariant);

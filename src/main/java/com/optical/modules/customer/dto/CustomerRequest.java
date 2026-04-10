@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Getter
@@ -24,4 +25,6 @@ public class CustomerRequest {
     private LocalDate dob;
 
     private String notes;
+
+    private BigDecimal pendingAmount;
 }

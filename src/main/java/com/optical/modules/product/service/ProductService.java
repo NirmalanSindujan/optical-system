@@ -106,6 +106,7 @@ public class ProductService {
         variant.setQuantity(request.getQuantity());
         variant.setIsActive(request.getVariantActive() == null ? true : request.getVariantActive());
         ProductVariant savedVariant = productVariantRepository.save(variant);
+        productSupportService.initializeMainBranchInventory(savedVariant);
 
         saveDetails(savedVariant, request);
 

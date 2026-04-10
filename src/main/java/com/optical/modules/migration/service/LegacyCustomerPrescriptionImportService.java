@@ -10,6 +10,8 @@ import com.optical.modules.patient.repository.PatientRepository;
 import com.optical.modules.prescription.entity.Prescription;
 import com.optical.modules.prescription.repository.PrescriptionRepository;
 import lombok.RequiredArgsConstructor;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,11 +29,12 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -42,6 +45,7 @@ import static com.optical.common.util.StringNormalizer.normalize;
 public class LegacyCustomerPrescriptionImportService {
 
     private static final String LEGACY_SOURCE = "hashvouv_saffiyahpos";
+    private static final int BATCH_SIZE = 250;
     private static final Pattern INSERT_PATTERN_TEMPLATE = Pattern.compile(
             "INSERT INTO `%s` \\((.*?)\\) VALUES\\s*(.*?);",
             Pattern.DOTALL | Pattern.CASE_INSENSITIVE
@@ -52,6 +56,8 @@ public class LegacyCustomerPrescriptionImportService {
     private final PatientRepository patientRepository;
     private final PrescriptionRepository prescriptionRepository;
     private final ObjectMapper objectMapper;
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Transactional
     public LegacyCustomerPrescriptionImportResponse importFromSqlDump(MultipartFile file) {
@@ -88,27 +94,24 @@ public class LegacyCustomerPrescriptionImportService {
         Map<Long, LegacyCustomerBill> legacyBills = parseCustomerBills(sql);
         List<LegacyPrescription> legacyPrescriptions = parsePrescriptions(sql);
 
+        resetMigrationData();
+
         ImportCounters counters = new ImportCounters();
-        Map<Long, Customer> customersByLegacyId = new HashMap<>();
+        Map<Long, Customer> customersByLegacyId = importCustomers(
+                legacyCustomers,
+                counters,
+                sourceFileName,
+                progressListener
+        );
 
-        legacyCustomers.values().stream()
-                .sorted(Comparator.comparing(LegacyCustomer::id))
-                .forEach(legacyCustomer -> {
-                    Customer customer = upsertCustomer(legacyCustomer, counters);
-                    customersByLegacyId.put(legacyCustomer.id(), customer);
-                    publishProgress(sourceFileName, counters, progressListener);
-                });
-
-        legacyPrescriptions.stream()
-                .sorted(Comparator.comparing(LegacyPrescription::id))
-                .forEach(legacyPrescription -> importPrescription(
-                        legacyPrescription,
-                        legacyBills,
-                        customersByLegacyId,
-                        counters,
-                        sourceFileName,
-                        progressListener
-                ));
+        importPrescriptions(
+                legacyPrescriptions,
+                legacyBills,
+                customersByLegacyId,
+                counters,
+                sourceFileName,
+                progressListener
+        );
 
         LegacyCustomerPrescriptionImportResponse response = buildResponse(sourceFileName, counters);
         if (progressListener != null) {
@@ -134,119 +137,138 @@ public class LegacyCustomerPrescriptionImportService {
                 .build();
     }
 
-    private void importPrescription(
-            LegacyPrescription legacyPrescription,
+    private void resetMigrationData() {
+        entityManager.createNativeQuery("UPDATE customer_bill SET patient_id = NULL WHERE patient_id IS NOT NULL")
+                .executeUpdate();
+        entityManager.createNativeQuery("UPDATE customer_bill SET customer_id = NULL WHERE customer_id IS NOT NULL")
+                .executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM customer_credit_ledger").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM prescription").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM patient").executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM customer").executeUpdate();
+        entityManager.flush();
+    }
+
+    private Map<Long, Customer> importCustomers(
+            Map<Long, LegacyCustomer> legacyCustomers,
+            ImportCounters counters,
+            String sourceFileName,
+            ImportProgressListener progressListener
+    ) {
+        Map<Long, Customer> customersByLegacyId = new HashMap<>();
+        List<Customer> pendingCustomers = new ArrayList<>();
+        Set<String> usedPhones = new HashSet<>();
+
+        legacyCustomers.values().stream()
+                .sorted(Comparator.comparing(LegacyCustomer::id))
+                .forEach(legacyCustomer -> {
+                    counters.customersProcessed++;
+                    Customer customer = buildCustomer(legacyCustomer, usedPhones);
+                    pendingCustomers.add(customer);
+                    customersByLegacyId.put(legacyCustomer.id(), customer);
+                    counters.customersCreated++;
+
+                    if (pendingCustomers.size() >= BATCH_SIZE) {
+                        customerRepository.saveAll(pendingCustomers);
+                        customerRepository.flush();
+                        pendingCustomers.clear();
+                    }
+                    publishProgress(sourceFileName, counters, progressListener);
+                });
+
+        if (!pendingCustomers.isEmpty()) {
+            customerRepository.saveAll(pendingCustomers);
+            customerRepository.flush();
+        }
+        return customersByLegacyId;
+    }
+
+    private Customer buildCustomer(LegacyCustomer legacyCustomer, Set<String> usedPhones) {
+        String normalizedPhone = normalizePhone(legacyCustomer.number());
+        String duplicatePhone = null;
+        if (normalizedPhone != null && !usedPhones.add(normalizedPhone)) {
+            duplicatePhone = normalizedPhone;
+            normalizedPhone = null;
+        }
+
+        Customer customer = new Customer();
+        customer.setName(defaultString(legacyCustomer.name(), "LEGACY-CUSTOMER-" + legacyCustomer.id()));
+        customer.setPhone(normalizedPhone);
+        customer.setAddress(normalize(legacyCustomer.address()));
+        customer.setGender(normalize(legacyCustomer.gender()));
+        customer.setDob(parseDate(legacyCustomer.dob()));
+        customer.setPendingAmount(parseDecimal(legacyCustomer.receivables()));
+        customer.setNotes(buildCustomerImportNote(legacyCustomer, duplicatePhone));
+        return customer;
+    }
+
+    private void importPrescriptions(
+            List<LegacyPrescription> legacyPrescriptions,
             Map<Long, LegacyCustomerBill> legacyBills,
             Map<Long, Customer> customersByLegacyId,
             ImportCounters counters,
             String sourceFileName,
             ImportProgressListener progressListener
     ) {
-        counters.prescriptionsProcessed++;
+        Map<String, Patient> patientsByKey = new HashMap<>();
+        List<Patient> pendingPatients = new ArrayList<>();
+        List<Prescription> pendingPrescriptions = new ArrayList<>();
 
-        LegacyCustomerBill legacyBill = legacyBills.get(legacyPrescription.customerBillId());
-        if (legacyBill == null) {
-            counters.prescriptionsSkipped++;
-            publishProgress(sourceFileName, counters, progressListener);
-            return;
-        }
+        legacyPrescriptions.stream()
+                .sorted(Comparator.comparing(LegacyPrescription::id))
+                .forEach(legacyPrescription -> {
+                    counters.prescriptionsProcessed++;
 
-        Customer customer = customersByLegacyId.get(legacyBill.customerId());
-        if (customer == null) {
-            counters.prescriptionsSkipped++;
-            publishProgress(sourceFileName, counters, progressListener);
-            return;
-        }
+                    LegacyCustomerBill legacyBill = legacyPrescription.customerBillId() == null
+                            ? null
+                            : legacyBills.get(legacyPrescription.customerBillId());
+                    Long legacyCustomerId = legacyBill != null
+                            ? legacyBill.customerId()
+                            : legacyPrescription.customerId();
+                    Customer customer = legacyCustomerId == null ? null : customersByLegacyId.get(legacyCustomerId);
+                    if (customer == null) {
+                        counters.prescriptionsSkipped++;
+                        publishProgress(sourceFileName, counters, progressListener);
+                        return;
+                    }
 
-        Patient patient = findOrCreatePatient(customer, legacyPrescription, counters);
-        String importNote = buildPrescriptionImportNote(legacyPrescription);
-        if (prescriptionRepository.findFirstByNotesAndDeletedAtIsNull(importNote).isPresent()) {
-            counters.prescriptionsSkipped++;
-            publishProgress(sourceFileName, counters, progressListener);
-            return;
-        }
+                    Patient patient = findOrCreatePatient(
+                            customer,
+                            legacyPrescription,
+                            patientsByKey,
+                            pendingPatients,
+                            counters
+                    );
 
-        Prescription prescription = new Prescription();
-        prescription.setPatient(patient);
-        prescription.setPrescriptionDate(resolvePrescriptionDate(legacyPrescription, legacyBill));
-        prescription.setValues(buildPrescriptionValues(legacyPrescription, legacyBill, customer));
-        prescription.setNotes(importNote);
-        prescriptionRepository.save(prescription);
-        counters.prescriptionsCreated++;
-        publishProgress(sourceFileName, counters, progressListener);
+                    Prescription prescription = new Prescription();
+                    prescription.setPatient(patient);
+                    prescription.setPrescriptionDate(resolvePrescriptionDate(legacyPrescription, legacyBill));
+                    prescription.setValues(buildPrescriptionValues(legacyPrescription, legacyBill, customer));
+                    pendingPrescriptions.add(prescription);
+                    counters.prescriptionsCreated++;
+
+                    if (pendingPrescriptions.size() >= BATCH_SIZE) {
+                        flushPrescriptionBatch(pendingPatients, pendingPrescriptions);
+                    }
+                    publishProgress(sourceFileName, counters, progressListener);
+                });
+
+        flushPrescriptionBatch(pendingPatients, pendingPrescriptions);
     }
 
-    private Customer upsertCustomer(LegacyCustomer legacyCustomer, ImportCounters counters) {
-        counters.customersProcessed++;
-
-        String normalizedPhone = normalizePhone(legacyCustomer.number());
-        String normalizedName = normalize(legacyCustomer.name());
-        LocalDate dob = parseDate(legacyCustomer.dob());
-
-        Optional<Customer> existing = Optional.empty();
-        if (normalizedPhone != null) {
-            existing = customerRepository.findFirstByPhoneAndDeletedAtIsNull(normalizedPhone);
-        }
-        if (existing.isEmpty() && normalizedName != null && dob != null) {
-            existing = customerRepository.findFirstByNameIgnoreCaseAndDobAndDeletedAtIsNull(normalizedName, dob);
-        }
-        if (existing.isEmpty() && normalizedName != null) {
-            existing = customerRepository.findFirstByNameIgnoreCaseAndDeletedAtIsNull(normalizedName);
-        }
-
-        BigDecimal pendingAmount = parseDecimal(legacyCustomer.receivables());
-        if (existing.isPresent()) {
-            Customer customer = existing.get();
-            boolean changed = false;
-
-            changed |= setIfBlank(() -> customer.getName(), customer::setName, normalizedName);
-            changed |= setIfBlank(() -> customer.getPhone(), customer::setPhone, normalizedPhone);
-            changed |= setIfBlank(() -> customer.getAddress(), customer::setAddress, normalize(legacyCustomer.address()));
-            changed |= setIfBlank(() -> customer.getGender(), customer::setGender, normalize(legacyCustomer.gender()));
-            changed |= setIfNull(customer.getDob(), customer::setDob, dob);
-
-            BigDecimal currentPending = customer.getPendingAmount() == null ? BigDecimal.ZERO : customer.getPendingAmount();
-            if (pendingAmount.compareTo(currentPending) > 0) {
-                customer.setPendingAmount(pendingAmount);
-                changed = true;
-            }
-
-            if (changed) {
-                customerRepository.save(customer);
-                counters.customersUpdated++;
-            }
-            return customer;
-        }
-
-        Customer customer = new Customer();
-        customer.setName(normalizedName == null ? "LEGACY-CUSTOMER-" + legacyCustomer.id() : normalizedName);
-        customer.setPhone(normalizedPhone);
-        customer.setAddress(normalize(legacyCustomer.address()));
-        customer.setGender(normalize(legacyCustomer.gender()));
-        customer.setDob(dob);
-        customer.setPendingAmount(pendingAmount);
-        customer.setNotes("Legacy import from " + LEGACY_SOURCE + " customerId=" + legacyCustomer.id());
-        counters.customersCreated++;
-        return customerRepository.save(customer);
-    }
-
-    private Patient findOrCreatePatient(Customer customer, LegacyPrescription legacyPrescription, ImportCounters counters) {
+    private Patient findOrCreatePatient(
+            Customer customer,
+            LegacyPrescription legacyPrescription,
+            Map<String, Patient> patientsByKey,
+            List<Patient> pendingPatients,
+            ImportCounters counters
+    ) {
         String patientName = normalize(legacyPrescription.patientName());
         String resolvedName = patientName == null ? customer.getName() : patientName;
-        Optional<Patient> existing = patientRepository.findFirstByCustomerIdAndNameIgnoreCase(customer.getId(), resolvedName);
-
-        if (existing.isPresent()) {
-            Patient patient = existing.get();
-            boolean changed = false;
-            changed |= setIfBlank(() -> patient.getGender(), patient::setGender, normalize(legacyPrescription.gender()));
-            if (isSamePerson(resolvedName, customer.getName())) {
-                changed |= setIfNull(patient.getDob(), patient::setDob, customer.getDob());
-            }
-            if (changed) {
-                patientRepository.save(patient);
-                counters.patientsUpdated++;
-            }
-            return patient;
+        String patientKey = patientKey(customer, resolvedName);
+        Patient existing = patientsByKey.get(patientKey);
+        if (existing != null) {
+            return existing;
         }
 
         Patient patient = new Patient();
@@ -256,9 +278,29 @@ public class LegacyCustomerPrescriptionImportService {
         if (isSamePerson(resolvedName, customer.getName())) {
             patient.setDob(customer.getDob());
         }
-        patient.setNotes("Legacy import from " + LEGACY_SOURCE + " patientName=" + resolvedName);
+        patient.setNotes(buildPatientImportNote(legacyPrescription));
+        pendingPatients.add(patient);
+        patientsByKey.put(patientKey, patient);
         counters.patientsCreated++;
-        return patientRepository.save(patient);
+        return patient;
+    }
+
+    private String patientKey(Customer customer, String patientName) {
+        String normalizedName = normalize(patientName);
+        return customer.getId() + "|" + (normalizedName == null ? "" : normalizedName.toLowerCase(Locale.ROOT));
+    }
+
+    private void flushPrescriptionBatch(List<Patient> pendingPatients, List<Prescription> pendingPrescriptions) {
+        if (!pendingPatients.isEmpty()) {
+            patientRepository.saveAll(pendingPatients);
+            patientRepository.flush();
+            pendingPatients.clear();
+        }
+        if (!pendingPrescriptions.isEmpty()) {
+            prescriptionRepository.saveAll(pendingPrescriptions);
+            prescriptionRepository.flush();
+            pendingPrescriptions.clear();
+        }
     }
 
     private ObjectNode buildPrescriptionValues(
@@ -269,19 +311,49 @@ public class LegacyCustomerPrescriptionImportService {
         ObjectNode values = objectMapper.createObjectNode();
         values.put("legacySource", LEGACY_SOURCE);
         values.put("legacyPrescriptionId", legacyPrescription.id());
-        values.put("legacyCustomerBillId", legacyPrescription.customerBillId());
-        values.put("legacyCustomerId", legacyBill.customerId());
+        if (legacyPrescription.customerBillId() != null) {
+            values.put("legacyCustomerBillId", legacyPrescription.customerBillId());
+        }
+        values.put("legacyCustomerId", legacyBill != null ? legacyBill.customerId() : legacyPrescription.customerId());
         values.put("patientName", defaultString(legacyPrescription.patientName(), customer.getName()));
         putIfPresent(values, "age", parseInteger(legacyPrescription.fields().get("age")));
         putIfPresent(values, "gender", normalize(legacyPrescription.gender()));
-        putIfPresent(values, "billDate", legacyBill.date());
-        putIfPresent(values, "billCreatedAt", legacyBill.createdAt());
+        if (legacyBill != null) {
+            putIfPresent(values, "billDate", legacyBill.date());
+            putIfPresent(values, "billCreatedAt", legacyBill.createdAt());
+        }
 
         values.set("right", buildEyeNode("r", legacyPrescription.fields()));
         values.set("left", buildEyeNode("l", legacyPrescription.fields()));
         values.set("pd", buildPdNode(legacyPrescription.fields()));
         values.set("legacyRaw", buildLegacyRawNode(legacyPrescription.fields()));
         return values;
+    }
+
+    private String buildCustomerImportNote(LegacyCustomer legacyCustomer, String duplicatePhone) {
+        ObjectNode note = objectMapper.createObjectNode();
+        note.put("legacySource", LEGACY_SOURCE);
+        note.put("legacyCustomerId", legacyCustomer.id());
+        putIfPresent(note, "legacyName", legacyCustomer.name());
+        putIfPresent(note, "legacyPhone", legacyCustomer.number());
+        putIfPresent(note, "legacyAddress", legacyCustomer.address());
+        putIfPresent(note, "legacyGender", legacyCustomer.gender());
+        putIfPresent(note, "legacyDob", legacyCustomer.dob());
+        putIfPresent(note, "legacyReceivables", legacyCustomer.receivables());
+        putIfPresent(note, "duplicatePhoneSuppressed", duplicatePhone);
+        return note.toString();
+    }
+
+    private String buildPatientImportNote(LegacyPrescription legacyPrescription) {
+        ObjectNode note = objectMapper.createObjectNode();
+        note.put("legacySource", LEGACY_SOURCE);
+        note.put("legacyPrescriptionId", legacyPrescription.id());
+        putIfPresent(note, "legacyPatientName", legacyPrescription.patientName());
+        putIfPresent(note, "legacyGender", legacyPrescription.gender());
+        if (legacyPrescription.customerBillId() != null) {
+            note.put("legacyCustomerBillId", legacyPrescription.customerBillId());
+        }
+        return note.toString();
     }
 
     private ObjectNode buildEyeNode(String eyePrefix, Map<String, String> fields) {
@@ -368,9 +440,11 @@ public class LegacyCustomerPrescriptionImportService {
     }
 
     private LocalDate resolvePrescriptionDate(LegacyPrescription legacyPrescription, LegacyCustomerBill legacyBill) {
-        LocalDate billDate = parseDate(legacyBill.date());
-        if (billDate != null) {
-            return billDate;
+        if (legacyBill != null) {
+            LocalDate billDate = parseDate(legacyBill.date());
+            if (billDate != null) {
+                return billDate;
+            }
         }
 
         LocalDateTime createdAt = parseDateTime(legacyPrescription.fields().get("createdAt"));
@@ -378,18 +452,14 @@ public class LegacyCustomerPrescriptionImportService {
             return createdAt.toLocalDate();
         }
 
-        LocalDateTime billCreatedAt = parseDateTime(legacyBill.createdAt());
-        if (billCreatedAt != null) {
-            return billCreatedAt.toLocalDate();
+        if (legacyBill != null) {
+            LocalDateTime billCreatedAt = parseDateTime(legacyBill.createdAt());
+            if (billCreatedAt != null) {
+                return billCreatedAt.toLocalDate();
+            }
         }
 
         return LocalDate.now();
-    }
-
-    private String buildPrescriptionImportNote(LegacyPrescription legacyPrescription) {
-        return "Legacy import from " + LEGACY_SOURCE
-                + " prescriptionId=" + legacyPrescription.id()
-                + ", customerBillId=" + legacyPrescription.customerBillId();
     }
 
     private Map<Long, LegacyCustomer> parseCustomers(String sql) {
@@ -583,6 +653,7 @@ public class LegacyCustomerPrescriptionImportService {
                 parseLong(row.get("id")),
                 row.get("patient_name"),
                 row.get("gender"),
+                parseLong(row.get("customerId")),
                 parseLong(row.get("customerBillId")),
                 row
         );
@@ -720,37 +791,6 @@ public class LegacyCustomerPrescriptionImportService {
         }
     }
 
-    private boolean setIfBlank(ValueSupplier<String> getter, ValueConsumer<String> setter, String incomingValue) {
-        String normalizedIncoming = normalize(incomingValue);
-        if (normalizedIncoming == null) {
-            return false;
-        }
-        String currentValue = normalize(getter.get());
-        if (currentValue == null) {
-            setter.accept(normalizedIncoming);
-            return true;
-        }
-        return false;
-    }
-
-    private boolean setIfNull(LocalDate currentValue, ValueConsumer<LocalDate> setter, LocalDate incomingValue) {
-        if (currentValue == null && incomingValue != null) {
-            setter.accept(incomingValue);
-            return true;
-        }
-        return false;
-    }
-
-    @FunctionalInterface
-    private interface ValueSupplier<T> {
-        T get();
-    }
-
-    @FunctionalInterface
-    private interface ValueConsumer<T> {
-        void accept(T value);
-    }
-
     private static final class ImportCounters {
         private long customersProcessed;
         private long customersCreated;
@@ -785,6 +825,7 @@ public class LegacyCustomerPrescriptionImportService {
             Long id,
             String patientName,
             String gender,
+            Long customerId,
             Long customerBillId,
             Map<String, String> fields
     ) {
